@@ -1,0 +1,12 @@
+node_modules
+src
+tsconfig.json
+tsconfig.tsbuildinfo
+*.log
+.DS_Store
+.env
+.env.local
+.github
+.changeset
+CLAUDE.md
+features.html

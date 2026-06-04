@@ -1,0 +1,10 @@
+dist
+node_modules
+coverage
+*.tsbuildinfo
+package-lock.json
+
+# One ~3700-line HTML/CSS/JS template literal — Prettier can't format the
+# string contents and reflowing the wrapper risks the escape-sequence pitfalls
+# documented in CLAUDE.md. Left as-is on purpose.
+src/inspector/ui.ts

@@ -1,0 +1,32 @@
+{
+  "name": "create-taqwright",
+  "version": "0.0.1",
+  "description": "Scaffold a new taqwright project — `npm init taqwright`",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "create-taqwright": "index.js"
+  },
+  "files": [
+    "index.js",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "dependencies": {
+    "taqwright": "latest"
+  },
+  "keywords": [
+    "taqwright",
+    "create",
+    "init",
+    "scaffold",
+    "mobile",
+    "appium",
+    "playwright"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}
