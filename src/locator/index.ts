@@ -105,6 +105,16 @@ export interface ScrollIntoViewOptions {
    * available. Useful for platforms / drivers where native scroll misbehaves.
    */
   forceGesture?: boolean;
+  /**
+   * After the element is on-screen, keep nudging it upward until its bottom
+   * edge sits at least this fraction of the screen height above the bottom
+   * (e.g. `0.2` = 20%). Best-effort — useful when an element lands at, or
+   * behind, the bottom edge / a bottom bar where `isVisible()` passes but the
+   * element isn't actually usable. The nudge swipes along the `from.x` column
+   * (default centre) and stops early if there's no more room to scroll.
+   * Default: `0` (no nudge — behaviour unchanged).
+   */
+  bottomMargin?: number;
 }
 
 export interface LocatorContext {
@@ -976,6 +986,56 @@ export class Locator {
    * - **Fallback**: repeated swipes with the configured direction / coordinates.
    */
   async scrollIntoView(opts?: ScrollIntoViewOptions): Promise<void> {
+    await this.scrollUntilVisible(opts);
+    if (opts?.bottomMargin && opts.bottomMargin > 0) {
+      await this.nudgeAboveBottom(opts.bottomMargin, opts);
+    }
+  }
+
+  /**
+   * Best-effort: nudge an already-visible element upward until its bottom edge
+   * clears the bottom `margin` fraction of the screen. No-throw — stops when
+   * cleared, when there's no more scroll room, or after a few attempts.
+   */
+  private async nudgeAboveBottom(margin: number, opts?: ScrollIntoViewOptions): Promise<void> {
+    const driver = this.ctx.driver;
+    const xFrac = opts?.from?.x ?? 0.5;
+    for (let i = 0; i < 5; i++) {
+      const rect = await driver.getWindowRect();
+      const box = await this.boundingBox({ timeout: opts?.visibleTimeout ?? 500 }).catch(
+        () => null,
+      );
+      if (!box) return;
+      const bottom = box.y + box.height;
+      const limit = rect.height * (1 - margin);
+      if (bottom <= limit) return; // already clears the bottom margin
+      // Reveal content below (finger swipes UP) so the element moves up. Travel
+      // ~the overshoot, capped; slow drag to keep it ~1:1 with minimal fling.
+      const overshootFrac = Math.min(0.4, (bottom - limit) / rect.height);
+      const x = Math.floor(rect.width * xFrac);
+      const fromY = Math.floor(rect.height * (0.5 + overshootFrac / 2));
+      const toY = Math.floor(rect.height * (0.5 - overshootFrac / 2));
+      try {
+        await driver.performActions([
+          {
+            type: 'pointer',
+            id: 'finger1',
+            parameters: { pointerType: 'touch' },
+            actions: [
+              { type: 'pointerMove', duration: 0, x, y: fromY },
+              { type: 'pointerDown', button: 0 },
+              { type: 'pointerMove', duration: opts?.duration ?? 600, x, y: toY },
+              { type: 'pointerUp', button: 0 },
+            ],
+          },
+        ]);
+      } finally {
+        await driver.releaseActions().catch(() => {});
+      }
+    }
+  }
+
+  private async scrollUntilVisible(opts?: ScrollIntoViewOptions): Promise<void> {
     const direction: ScrollDirection = opts?.direction ?? 'down';
     const maxAttempts = opts?.maxAttempts ?? 10;
     const visibleTimeout = opts?.visibleTimeout ?? 500;

@@ -155,6 +155,11 @@ export class CloudProvider implements DeviceProvider {
     const connection = {
       ...this.spec.hub,
       logLevel: 'warn',
+      // Cloud device allocation can be slow — especially many parallel sessions
+      // queueing for real devices. The wdio default (120s) aborts the `/session`
+      // POST before a device is granted; give it room (override via
+      // `appium.connectionTimeout`).
+      connectionRetryTimeout: this.use.appium?.connectionTimeout ?? 300_000,
       user: process.env[userVar],
       key: process.env[keyVar],
       capabilities: this.spec.buildCapabilities({

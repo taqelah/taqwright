@@ -17,6 +17,10 @@ function appiumConnection(use: TaqwrightUseOptions) {
     hostname: use.appium?.host ?? 'localhost',
     path: use.appium?.path ?? '/',
     logLevel: use.appium?.logLevel ?? 'warn',
+    // Only override wdio's default when the user set it (local Appium is fast).
+    ...(use.appium?.connectionTimeout !== undefined
+      ? { connectionRetryTimeout: use.appium.connectionTimeout }
+      : {}),
   };
 }
 
