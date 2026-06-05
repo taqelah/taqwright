@@ -6,6 +6,7 @@ import {
   classifyAppiumVersion,
   isAppiumVersionSupported,
   isNodeVersionSupported,
+  normalizeSysImagePath,
 } from '../dist/doctor.js';
 
 describe('classifyAppiumVersion', () => {
@@ -53,5 +54,40 @@ describe('isNodeVersionSupported', () => {
   test('unparseable → false', () => {
     assert.equal(isNodeVersionSupported(''), false);
     assert.equal(isNodeVersionSupported('nope'), false);
+  });
+});
+
+describe('normalizeSysImagePath', () => {
+  test('Windows backslashes + trailing backslash → forward slashes, no trailing', () => {
+    assert.equal(
+      normalizeSysImagePath('system-images\\android-37.0\\google_apis_playstore_ps16k\\x86_64\\'),
+      'system-images/android-37.0/google_apis_playstore_ps16k/x86_64',
+    );
+  });
+  test('POSIX trailing slash is removed', () => {
+    assert.equal(
+      normalizeSysImagePath('system-images/android-34/google_apis/arm64-v8a/'),
+      'system-images/android-34/google_apis/arm64-v8a',
+    );
+  });
+  test('no trailing separator → unchanged', () => {
+    assert.equal(
+      normalizeSysImagePath('system-images/android-34/google_apis/x86_64'),
+      'system-images/android-34/google_apis/x86_64',
+    );
+  });
+  test('mixed separators + surrounding whitespace → canonical forward-slash', () => {
+    assert.equal(
+      normalizeSysImagePath('  system-images\\android-34/google_apis\\x86_64\\  '),
+      'system-images/android-34/google_apis/x86_64',
+    );
+  });
+  test('normalized path maps to a valid sdkmanager package string', () => {
+    // Guards the exact Windows regression: the suggested fix command must use
+    // `;` separators, not the raw backslashes from config.ini.
+    const pkg = normalizeSysImagePath(
+      'system-images\\android-37.0\\google_apis_playstore_ps16k\\x86_64\\',
+    ).replace(/\//g, ';');
+    assert.equal(pkg, 'system-images;android-37.0;google_apis_playstore_ps16k;x86_64');
   });
 });
