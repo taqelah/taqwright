@@ -3,6 +3,7 @@ import { existsSync, promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { applyManagedEnv, readManifest } from './setup/paths.js';
+import { spawnTool } from './setup/spawn-tool.js';
 
 export type DoctorStatus = 'ok' | 'warn' | 'error';
 
@@ -493,7 +494,7 @@ async function commandExists(name: string): Promise<boolean> {
 /** Run `<cmd> --version`, capture stdout, return the first version-shaped token. */
 async function readCommandVersion(cmd: string): Promise<string | undefined> {
   return new Promise((resolve) => {
-    const child = spawn(cmd, ['--version'], {
+    const child = spawnTool(cmd, ['--version'], {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     let out = '';
@@ -515,7 +516,7 @@ async function readCommandVersion(cmd: string): Promise<string | undefined> {
  *  output (whatever the exit code) or `undefined` if it can't spawn. */
 async function readCommandOutput(cmd: string, args: string[]): Promise<string | undefined> {
   return new Promise((resolve) => {
-    const child = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawnTool(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'] });
     let out = '';
     child.stdout?.on('data', (chunk) => {
       out += String(chunk);
