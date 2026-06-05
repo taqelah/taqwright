@@ -1,14 +1,15 @@
 import { mkdir, writeFile, readdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { resolve, join, basename, relative } from 'node:path';
-import { spawn, execFile } from 'node:child_process';
+import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
 import { runSetup } from '../setup/index.js';
 import { download } from '../setup/archive.js';
+import { spawnTool } from '../setup/spawn-tool.js';
 
-const execFileP = promisify(execFile);
+const execP = promisify(exec);
 
 type Platform = 'android' | 'ios';
 
@@ -298,12 +299,8 @@ async function isNonEmpty(dir: string): Promise<boolean> {
 }
 
 function runNpm(args: string[], cwd: string): Promise<number> {
-  // On Windows, the npm binary is npm.cmd; without shell:true, spawn needs the .cmd extension.
-  // shell:true triggers a Node deprecation warning when args are passed as an array, so we
-  // resolve the binary name ourselves instead.
-  const cmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
   return new Promise((resolve_) => {
-    const child = spawn(cmd, args, { cwd, stdio: 'inherit' });
+    const child = spawnTool('npm', args, { cwd, stdio: 'inherit' });
     child.on('exit', (code, signal) => {
       if (signal) resolve_(128);
       else resolve_(code ?? 0);
@@ -317,7 +314,8 @@ function runNpm(args: string[], cwd: string): Promise<number> {
 
 async function isTaqwrightGloballyLinked(): Promise<boolean> {
   try {
-    const { stdout } = await execFileP('npm', ['root', '-g']);
+    // exec() always goes through a shell, so `npm` resolves to npm.cmd on Windows.
+    const { stdout } = await execP('npm root -g');
     return existsSync(join(stdout.trim(), '@taqwright', 'taqwright'));
   } catch {
     return false;
