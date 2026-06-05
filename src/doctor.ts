@@ -447,7 +447,7 @@ async function checkManagedSdkAvdImages(): Promise<DoctorCheck | undefined> {
     }
     const m = content.match(/^image\.sysdir\.1\s*=\s*(.+)$/m);
     if (!m) continue;
-    const sysDir = m[1]!.trim().replace(/\/+$/, '');
+    const sysDir = normalizeSysImagePath(m[1]!);
     if (!existsSync(path.join(androidHome, sysDir))) {
       missing.push({ avd: avdName, image: sysDir });
     }
@@ -464,10 +464,8 @@ async function checkManagedSdkAvdImages(): Promise<DoctorCheck | undefined> {
   const list = missing.map((m) => `${m.avd} → ${m.image}`).join('; ');
   // Convert `system-images/android-37.0/google_apis_playstore_ps16k/arm64-v8a`
   // → `sdkmanager "system-images;android-37.0;google_apis_playstore_ps16k;arm64-v8a"`.
-  const sdkmanagerCmds = missing.map(
-    (m) =>
-      `sdkmanager "${m.image.replace(/^system-images\//, 'system-images/').replace(/\//g, ';')}"`,
-  );
+  // `m.image` is already canonical forward-slash form (normalizeSysImagePath).
+  const sdkmanagerCmds = missing.map((m) => `sdkmanager "${m.image.replace(/\//g, ';')}"`);
   return {
     name: 'Managed SDK AVD images',
     status: 'warn',
@@ -572,4 +570,15 @@ export function isNodeVersionSupported(version: string): boolean {
   if (!m) return false;
   const major = Number(m[1]);
   return Number.isFinite(major) && major >= 24;
+}
+
+/**
+ * Canonicalize an AVD `image.sysdir.1` value: backslashes → forward slashes,
+ * trailing separators removed. On Windows the value is written with `\` and a
+ * trailing `\`, which would otherwise break the managed-SDK `existsSync` check
+ * and yield a malformed `sdkmanager "system-images;…"` fix command. A no-op on
+ * POSIX (values there are already forward-slash). Exported for testing.
+ */
+export function normalizeSysImagePath(raw: string): string {
+  return raw.trim().replace(/\\/g, '/').replace(/\/+$/, '');
 }
