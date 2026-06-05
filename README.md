@@ -5,7 +5,7 @@
 </h1>
 
 <p align="center">
-  <a href="https://github.com/taqelah/taqwright/tags"><img src="https://img.shields.io/badge/version-0.0.9-blue" alt="version" /></a>
+  <a href="https://github.com/taqelah/taqwright/tags"><img src="https://img.shields.io/badge/version-0.0.10-blue" alt="version" /></a>
 </p>
 
 E2E mobile UI testing on the Playwright runner, with a flat locator API on top of Appium 3.
