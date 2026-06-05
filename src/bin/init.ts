@@ -34,6 +34,12 @@ export interface InitOptions {
   yes?: boolean;
   /** Run `taqwright install` (Android toolchain) after scaffolding. */
   installToolchain?: boolean;
+  /**
+   * Also create a system image + Android emulator (`taqwright install
+   * --with-avd`). Only honored when the toolchain is being installed — the AVD
+   * lives inside that managed SDK.
+   */
+  withAvd?: boolean;
   /** Download the demo APK into `app/` so the example test runs immediately. */
   demoApp?: boolean;
 }
@@ -52,6 +58,7 @@ export async function runInit(argDir: string | undefined, opts: InitOptions = {}
   let platforms: Platform[];
   let install: boolean;
   let installToolchain: boolean;
+  let withAvd: boolean;
   let demoApp: boolean;
 
   if (fullyScripted) {
@@ -68,6 +75,9 @@ export async function runInit(argDir: string | undefined, opts: InitOptions = {}
     // Scripted/CI: never auto-download (toolchain ~700 MB; demo app a few
     // MB) unless explicitly opted in — keeps CI deterministic + offline.
     installToolchain = opts.installToolchain ?? false;
+    // The emulator lives inside the managed SDK, so it only makes sense when
+    // the toolchain installs. Scripted/CI: opt-in only (~1 GB system image).
+    withAvd = (opts.withAvd ?? false) && installToolchain;
     demoApp = (opts.demoApp ?? false) && platforms.includes('android');
   } else {
     const rl = createInterface({ input: stdin, output: stdout });
@@ -105,6 +115,21 @@ export async function runInit(argDir: string | undefined, opts: InitOptions = {}
               rl,
               'Auto-install the Android toolchain now? (~700 MB: JDK + Android SDK + Appium)',
               false,
+            )
+          : false);
+      // Only meaningful when the toolchain is installing (the emulator lives
+      // inside the managed SDK). Default yes — the user already opted into the
+      // toolchain, so this completes a bootable setup; the prompt spells out
+      // the skip consequence.
+      withAvd =
+        opts.withAvd ??
+        (installToolchain
+          ? await yesNo(
+              rl,
+              'Also create an Android emulator now? (~1 GB: system image + AVD). ' +
+                'Skip and no emulator is created — boot the example test on a physical ' +
+                'device, or add one later with `taqwright install --with-avd`',
+              true,
             )
           : false);
       // Default yes — it's a small APK and makes the example test runnable
@@ -205,9 +230,13 @@ export async function runInit(argDir: string | undefined, opts: InitOptions = {}
 
   let toolchainInstalled = false;
   if (installToolchain && platforms.includes('android')) {
-    console.log('\nInstalling the Android toolchain — this can take a few minutes…\n');
+    console.log(
+      withAvd
+        ? '\nInstalling the Android toolchain + emulator — this can take several minutes…\n'
+        : '\nInstalling the Android toolchain — this can take a few minutes…\n',
+    );
     try {
-      await runSetup({});
+      await runSetup({ withAvd });
       toolchainInstalled = true;
     } catch (err) {
       console.error(`\ntaqwright install failed: ${(err as Error).message}`);
@@ -225,7 +254,12 @@ export async function runInit(argDir: string | undefined, opts: InitOptions = {}
   if (!install) console.log('  npm install');
   if (platforms.includes('android') && !toolchainInstalled) {
     console.log(
-      '  npx taqwright install         # auto-install the Android toolchain (JDK + SDK + Appium)',
+      '  npx taqwright install --with-avd   # Android toolchain + emulator (JDK + SDK + Appium + AVD); drop --with-avd to skip the ~1 GB emulator',
+    );
+  } else if (platforms.includes('android') && !withAvd) {
+    // Toolchain installed but the emulator was skipped — show how to add one.
+    console.log(
+      '  npx taqwright install --with-avd   # add an Android emulator (~1 GB), or use a physical device',
     );
   }
   console.log('  npx taqwright doctor          # check your environment');
