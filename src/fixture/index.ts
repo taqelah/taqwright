@@ -11,6 +11,7 @@ import {
   type TaqwrightUseOptions,
 } from '../types/index.js';
 import { getUseOptions, loadTaqwrightConfig } from '../config.js';
+import { resolvedPoolEnvKey } from '../discovery.js';
 import { appiumRemoteOptions } from '../capabilities.js';
 import { isPortOpen } from '../auto-appium.js';
 import { startAppiumServer } from '../providers/appium.js';
@@ -76,7 +77,23 @@ export const test = baseTest.extend<TaqwrightFixtures, TaqwrightWorkerFixtures>(
       }
 
       const idx = workerInfo.parallelIndex;
-      const pool = (useOpts.device as { pool?: DevicePoolEntry[] }).pool;
+      const dev = useOpts.device as { pool?: DevicePoolEntry[]; autoDiscover?: boolean };
+      let pool = dev.pool;
+
+      // Auto-discover: the globalSetup hook resolved the device set before any
+      // worker forked and published it as an env var. Hydrate `pool` from it so
+      // the partition path below treats it exactly like a hand-written pool.
+      if ((!pool || pool.length === 0) && dev.autoDiscover) {
+        const resolved = process.env[resolvedPoolEnvKey(projectName)];
+        if (!resolved) {
+          throw new Error(
+            `taqwright: device.autoDiscover is set on project "${projectName ?? ''}" but no ` +
+              `resolved device pool was found — the globalSetup hook did not run. Launch via ` +
+              `\`taqwright test\` (or Playwright with the generated config).`,
+          );
+        }
+        pool = JSON.parse(resolved) as DevicePoolEntry[];
+      }
 
       // No pool → existing single-device path. Worker fixture is one-shot,
       // no per-worker spawn needed (the CLI already started Appium if
