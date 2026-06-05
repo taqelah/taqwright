@@ -414,7 +414,7 @@ export default defineConfig({
   timeout: 60_000,
   expectTimeout: 30_000,
   // 'html' writes playwright-report/ — view it with: npx taqwright show-report
-  reporter: [['list'], ['html', { open: 'never' }]],
+  reporter: [['list'], ['html', { open: 'never', title: 'Taqwright Test Report' }]],
 
   // ─── Optional top-level overrides ─────────────────────────────────
   // retries: 1,
