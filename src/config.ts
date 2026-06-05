@@ -2,7 +2,7 @@ import { access } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { PlaywrightTestConfig } from '@playwright/test';
-import { Platform, type TaqwrightConfig } from './types/index.js';
+import { Platform, type TaqwrightConfig, type TaqwrightProjectConfig } from './types/index.js';
 
 export const TAQWRIGHT_KEY = '__taqwright__';
 
@@ -68,6 +68,46 @@ export async function loadPlaywrightConfig(cwd?: string): Promise<PlaywrightConf
 }
 
 /**
+ * Resolve a project's effective worker count: its own `project.workers`, then
+ * the top-level `config.workers`, then `1`. The single source of truth for "how
+ * many workers does this project run with" — used by `defineConfig`, the
+ * parallel/auto-discover validators, the discovery globalSetup, and the CLI.
+ */
+export function effectiveWorkers(project: TaqwrightProjectConfig, config: TaqwrightConfig): number {
+  return project.workers ?? config.workers ?? 1;
+}
+
+/**
+ * Decide what `--workers` the CLI should hand Playwright for a given run, so
+ * its single global worker pool matches the one project being run.
+ *
+ * - User passed `--workers` → honor it (returns the parsed number; `undefined`
+ *   if unparseable, so we don't forward garbage).
+ * - Exactly one resolvable target project (a single `--project`, or the sole
+ *   project when no filter is given) → that project's `effectiveWorkers`.
+ * - Ambiguous (multiple projects, no single filter) → `undefined`: leave
+ *   Playwright on the config's global cap rather than inject a value that would
+ *   over-spawn a smaller project.
+ */
+export function resolveCliWorkers(
+  config: TaqwrightConfig,
+  projectFilter: string[],
+  userWorkers?: string | number,
+): number | undefined {
+  if (userWorkers !== undefined) {
+    const n = typeof userWorkers === 'number' ? userWorkers : Number.parseInt(userWorkers, 10);
+    return Number.isFinite(n) ? n : undefined;
+  }
+  let target: TaqwrightProjectConfig | undefined;
+  if (projectFilter.length === 1) {
+    target = config.projects.find((p) => p.name === projectFilter[0]);
+  } else if (projectFilter.length === 0 && config.projects.length === 1) {
+    target = config.projects[0];
+  }
+  return target ? effectiveWorkers(target, config) : undefined;
+}
+
+/**
  * Define an taqwright config. Returns a Playwright TestConfig (so
  * Playwright's runner can consume `taqwright.config.ts` directly via
  * `--config`) with the taqwright shape preserved on a private key for
@@ -105,13 +145,14 @@ export function defineConfig(config: TaqwrightConfig): PlaywrightConfigWithEmbed
     globalSetup = [internal, ...existing];
   }
 
-  // Honor the user's `workers` setting. We previously hardcoded `1` to
-  // prevent device contention, but with `device.pool` the fixture can
-  // partition devices/Appiums/driver-ports per worker safely. Without a
-  // pool, the user is responsible for ensuring `workers === 1` (or for
-  // the runtime fixture's pool-exhausted guard to fail fast).
+  // Playwright's worker pool is global, so we size it to the largest
+  // per-project worker count (`project.workers ?? config.workers ?? 1`). For a
+  // single-project run this is exactly that project's workers; the `taqwright`
+  // CLI further injects `--workers` for the resolved project so the global pool
+  // matches the one project being run. The runtime fixture's pool-exhausted
+  // guard fails fast if a smaller project ever over-spawns.
   const pwConfig: PlaywrightConfigWithEmbedded = {
-    workers: config.workers ?? 1,
+    workers: Math.max(1, ...config.projects.map((p) => effectiveWorkers(p, config))),
     fullyParallel: config.fullyParallel ?? false,
     forbidOnly: config.forbidOnly,
     timeout: config.timeout,
@@ -160,14 +201,15 @@ export function defineConfig(config: TaqwrightConfig): PlaywrightConfigWithEmbed
  * provider manages its own device queueing.
  */
 export function findParallelMisconfig(config: TaqwrightConfig): string | null {
-  const workers = config.workers ?? 1;
-  // workers <= 1 → serial; nothing runs concurrently, no contention.
-  // (`fullyParallel` only changes scheduling granularity, not the
-  // concurrent device count, which is bounded by `workers`.)
-  if (workers <= 1) return null;
-
   const problems: string[] = [];
   for (const project of config.projects) {
+    // Per-project worker count: `project.workers ?? config.workers ?? 1`.
+    // workers <= 1 → serial; nothing runs concurrently, no contention.
+    // (`fullyParallel` only changes scheduling granularity, not the
+    // concurrent device count, which is bounded by `workers`.)
+    const workers = effectiveWorkers(project, config);
+    if (workers <= 1) continue;
+
     const device = project.use.device;
     // Discriminated union: only emulator / local-device own a `pool`.
     if (device.provider !== 'emulator' && device.provider !== 'local-device') {

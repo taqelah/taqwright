@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { Command } from 'commander';
-import { findConfigFile } from '../config.js';
+import { findConfigFile, loadTaqwrightConfig, resolveCliWorkers } from '../config.js';
 import { maybeAutoStartAppium } from '../auto-appium.js';
 import { runDoctorChecks } from '../doctor.js';
 import { listDevices, type Device } from '../inspector/devices.js';
@@ -115,6 +115,7 @@ program
   .option('--retries <n>', 'maximum retry count for flaky tests')
   .option('--timeout <ms>', 'test timeout in milliseconds')
   .option('--shard <x/n>', 'shard to run, e.g. 1/3')
+  .option('--workers <n>', "number of parallel workers (default: the run's project workers)")
   .option('--list', 'list all tests without running them')
   .option('--pass-with-no-tests', 'exit with code 0 when no tests found')
   .allowUnknownOption(true)
@@ -150,6 +151,22 @@ program
     if (opts.passWithNoTests) args.push('--pass-with-no-tests');
 
     const projectFilter = Array.isArray(opts.project) ? (opts.project as string[]) : [];
+
+    // Playwright's worker pool is global, so size it to the project being run.
+    // Honor an explicit `--workers`; otherwise inject the resolved project's
+    // `workers` so the global pool matches the one project (the common
+    // one-project-per-run path). Ambiguous multi-project runs are left on the
+    // config's global cap.
+    const cfg = await loadTaqwrightConfig(dirname(configPath));
+    const workers = cfg
+      ? resolveCliWorkers(cfg, projectFilter, opts.workers as string | undefined)
+      : opts.workers !== undefined
+        ? Number.parseInt(String(opts.workers), 10)
+        : undefined;
+    if (workers !== undefined && Number.isFinite(workers)) {
+      args.push('--workers', String(workers));
+    }
+
     const appiumProcs = await maybeAutoStartAppium(configPath, projectFilter);
     const code = await runPlaywright(args);
     for (const proc of appiumProcs) {
