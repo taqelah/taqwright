@@ -112,3 +112,27 @@ describe('appiumRemoteOptions', () => {
     );
   });
 });
+
+describe('buildCapabilities — autoLaunch self-heal', () => {
+  const reset = { resetBetweenTests: true, buildPath: './App.apk', appBundleId: 'com.x' };
+
+  test('local Android with resetBetweenTests disables auto-launch', () => {
+    const c = buildCapabilities(android(reset));
+    assert.equal(c['appium:autoLaunch'], false);
+  });
+
+  test('no resetBetweenTests leaves auto-launch default (unset)', () => {
+    const c = buildCapabilities(android({ buildPath: './App.apk', appBundleId: 'com.x' }));
+    assert.equal('appium:autoLaunch' in c, false);
+  });
+
+  test('cloud provider keeps auto-launch (reset block does not run there)', () => {
+    const c = buildCapabilities(android({ ...reset, device: { provider: 'browserstack' } }));
+    assert.equal('appium:autoLaunch' in c, false);
+  });
+
+  test('a user-set appium:autoLaunch wins', () => {
+    const c = buildCapabilities(android({ ...reset, capabilities: { 'appium:autoLaunch': true } }));
+    assert.equal(c['appium:autoLaunch'], true);
+  });
+});
