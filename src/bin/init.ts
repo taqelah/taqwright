@@ -38,11 +38,7 @@ export interface InitOptions {
   demoApp?: boolean;
 }
 
-export async function runInit(
-  argDir: string | undefined,
-  taqwrightVersion: string,
-  opts: InitOptions = {},
-): Promise<void> {
+export async function runInit(argDir: string | undefined, opts: InitOptions = {}): Promise<void> {
   const fullyScripted =
     argDir !== undefined &&
     opts.testDir !== undefined &&
@@ -152,7 +148,7 @@ export async function runInit(
   }
 
   const files: Array<[string, string]> = [
-    ['package.json', packageJsonTemplate(projectName, taqwrightVersion)],
+    ['package.json', packageJsonTemplate(projectName)],
     ['.npmrc', npmrcTemplate()],
     ['tsconfig.json', tsconfigTemplate(testDir)],
     ['taqwright.config.ts', configTemplate(platforms, testDir, demoAppReady)],
@@ -193,8 +189,12 @@ export async function runInit(
       console.error(`\nnpm install exited with code ${code}.`);
       if (!linkedDev) {
         console.error(
-          '\nIf @taqwright/taqwright is not yet published (or your .npmrc lacks a GitHub Packages token), you are likely seeing a 404 for it.',
+          '\n@taqwright/taqwright installs from git+ssh://git@github.com/taqelah/taqwright.git,',
         );
+        console.error(
+          'so a failure here usually means no SSH access to the private taqelah/taqwright repo.',
+        );
+        console.error('Verify your GitHub SSH key with:  ssh -T git@github.com');
         console.error('To use a local taqwright build instead:');
         console.error('  cd /path/to/taqwright && npm link');
         console.error(`  cd ${cdHint} && npm link @taqwright/taqwright && npm install`);
@@ -324,7 +324,7 @@ async function isTaqwrightGloballyLinked(): Promise<boolean> {
 
 // ─── templates ────────────────────────────────────────────────────────
 
-function packageJsonTemplate(name: string, taqwrightVersion: string): string {
+function packageJsonTemplate(name: string): string {
   const obj = {
     name,
     private: true,
@@ -337,10 +337,11 @@ function packageJsonTemplate(name: string, taqwrightVersion: string): string {
       devices: 'taqwright devices',
       report: 'taqwright show-report',
     },
-    dependencies: {
-      '@taqwright/taqwright': `^${taqwrightVersion}`,
-    },
     devDependencies: {
+      // Temporary (pre-publish): pull taqwright straight from the private repo
+      // over SSH so `npm install` needs no GitHub Packages registry/token.
+      // Switch to a versioned registry range once @taqwright/taqwright ships.
+      '@taqwright/taqwright': 'git+ssh://git@github.com/taqelah/taqwright.git',
       '@types/node': '^24.0.0',
       typescript: '^5.4.0',
     },

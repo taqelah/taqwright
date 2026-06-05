@@ -192,7 +192,7 @@ program
         process.exit(1);
       }
       const { runInit } = await import('./init.js');
-      await runInit(dir, getVersion(), {
+      await runInit(dir, {
         testDir: opts.testDir,
         platform: platform as 'android' | 'ios' | 'both' | undefined,
         install: opts.install,
