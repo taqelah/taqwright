@@ -1,4 +1,12 @@
-# Taqwright
+<h1 align="center">
+  <img src="src/images/taqwright_logo.png" alt="Taqwright logo" width="120" />
+  <br />
+  Taqwright
+</h1>
+
+<p align="center">
+  <a href="https://github.com/taqelah/taqwright/tags"><img src="https://img.shields.io/badge/version-0.0.8-blue" alt="version" /></a>
+</p>
 
 E2E mobile UI testing on the Playwright runner, with a flat locator API on top of Appium 3.
 
