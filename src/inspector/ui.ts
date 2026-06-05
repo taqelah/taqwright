@@ -4010,9 +4010,22 @@ export const INSPECTOR_HTML = `<!doctype html>
     if (data.toolsMissing?.adb) warns.push("adb not on PATH — Android emulators won't show.");
     if (data.toolsMissing?.emulator) warns.push("emulator not on PATH — Android AVDs won't show (install Android command-line tools).");
     if (data.toolsMissing?.xcrun) warns.push("xcrun not on PATH — iOS simulators won't show (Xcode required).");
-    $('devices-warn').innerHTML = warns.length
-      ? warns.map((w) => '<div class="device-warn">' + escapeHtml(w) + '</div>').join('')
-      : '';
+    let warnHtml = warns.map((w) => '<div class="device-warn">' + escapeHtml(w) + '</div>').join('');
+    // Android-only: AVDs hidden because their system image isn't in the active
+    // (managed) SDK, so the managed emulator can't boot them. Explain + how to
+    // fall back to the user's own SDK. (No backticks/apostrophes in this inline
+    // JS — they break the outer template literal; see CLAUDE.md.)
+    if (deviceTab === 'android' && data.hiddenAndroid) {
+      const h = data.hiddenAndroid;
+      const n = h.names.length;
+      const msg =
+        n + ' emulator' + (n === 1 ? '' : 's') + ' hidden (' + h.names.join(', ') +
+        ') — created with a different Android SDK and cannot boot under the managed SDK. ' +
+        'To use your own emulators, delete ' + h.manifestPath + ' and reopen. ' +
+        'Or run "taqwright install --with-avd" to create a managed emulator.';
+      warnHtml += '<div class="device-warn">' + escapeHtml(msg) + '</div>';
+    }
+    $('devices-warn').innerHTML = warnHtml;
 
     // Update tab counts and active class.
     $('device-count-android').textContent = String(data.android.length);

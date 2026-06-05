@@ -1,9 +1,12 @@
 import { spawn } from 'node:child_process';
 import { existsSync, promises as fs } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { applyManagedEnv, readManifest } from './setup/paths.js';
 import { spawnTool } from './setup/spawn-tool.js';
+import { avdHomeDir, isAvdImageInstalled, readAvdSystemImage } from './setup/avd.js';
+
+// Re-exported so existing importers (and tests) keep resolving it from here.
+export { normalizeSysImagePath } from './setup/avd.js';
 
 export type DoctorStatus = 'ok' | 'warn' | 'error';
 
@@ -416,7 +419,7 @@ async function checkManagedSdkAvdImages(): Promise<DoctorCheck | undefined> {
   if (!readManifest()) return undefined;
   const androidHome = process.env.ANDROID_HOME;
   if (!androidHome) return undefined;
-  const avdHome = process.env.ANDROID_AVD_HOME || path.join(os.homedir(), '.android', 'avd');
+  const avdHome = avdHomeDir();
   if (!existsSync(avdHome)) return undefined;
 
   let entries: string[];
@@ -426,30 +429,19 @@ async function checkManagedSdkAvdImages(): Promise<DoctorCheck | undefined> {
     return undefined;
   }
 
-  const avdDirs = entries
+  const avdNames = entries
     .filter((name) => name.endsWith('.avd'))
-    .map((name) => ({
-      avdName: name.slice(0, -'.avd'.length),
-      configPath: path.join(avdHome, name, 'config.ini'),
-    }));
-  if (avdDirs.length === 0) return undefined;
+    .map((name) => name.slice(0, -'.avd'.length));
+  if (avdNames.length === 0) return undefined;
 
   const missing: Array<{ avd: string; image: string }> = [];
   let total = 0;
-  for (const { avdName, configPath } of avdDirs) {
-    if (!existsSync(configPath)) continue;
+  for (const avdName of avdNames) {
+    const image = await readAvdSystemImage(avdName, avdHome);
+    if (image === undefined) continue; // no config / no image.sysdir.1
     total++;
-    let content: string;
-    try {
-      content = await fs.readFile(configPath, 'utf-8');
-    } catch {
-      continue;
-    }
-    const m = content.match(/^image\.sysdir\.1\s*=\s*(.+)$/m);
-    if (!m) continue;
-    const sysDir = normalizeSysImagePath(m[1]!);
-    if (!existsSync(path.join(androidHome, sysDir))) {
-      missing.push({ avd: avdName, image: sysDir });
+    if (!isAvdImageInstalled(image, androidHome)) {
+      missing.push({ avd: avdName, image });
     }
   }
 
@@ -570,15 +562,4 @@ export function isNodeVersionSupported(version: string): boolean {
   if (!m) return false;
   const major = Number(m[1]);
   return Number.isFinite(major) && major >= 24;
-}
-
-/**
- * Canonicalize an AVD `image.sysdir.1` value: backslashes → forward slashes,
- * trailing separators removed. On Windows the value is written with `\` and a
- * trailing `\`, which would otherwise break the managed-SDK `existsSync` check
- * and yield a malformed `sdkmanager "system-images;…"` fix command. A no-op on
- * POSIX (values there are already forward-slash). Exported for testing.
- */
-export function normalizeSysImagePath(raw: string): string {
-  return raw.trim().replace(/\\/g, '/').replace(/\/+$/, '');
 }
