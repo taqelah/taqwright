@@ -1,6 +1,7 @@
 import type { Client as WebDriverClient } from 'webdriver';
 import type { Platform } from '../types/index.js';
 import type { HarLog } from '../network/har.js';
+import { TAQWRIGHT_FAVICON_DATA_URI } from '../branding-assets.js';
 
 /**
  * One row in the trace timeline. Captured AFTER the action completes so the
@@ -173,7 +174,8 @@ export class Tracer {
 
     return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
-<title>Trace — ${escHtml(info.title)}</title>
+<link rel="icon" type="image/png" href="${TAQWRIGHT_FAVICON_DATA_URI}">
+<title>Taqwright Trace — ${escHtml(info.title)}</title>
 <style>${PLAYER_CSS}</style>
 <script type="application/json" id="__tw_meta">${safeJson(meta)}</script>
 <script type="application/json" id="__tw_events">${safeJson(events)}</script>
