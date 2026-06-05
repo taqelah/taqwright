@@ -58,6 +58,25 @@ export function buildCapabilities(
     else caps['appium:appPackage'] = use.appBundleId;
   }
 
+  // When taqwright owns the per-test app lifecycle (resetBetweenTests on a local
+  // device — the `mobile` fixture does terminate → remove → install → activate),
+  // tell Appium NOT to auto-launch the app on session create. Session-create
+  // launch runs BEFORE the reset reinstall, so if a prior run left the app
+  // uninstalled (e.g. a removeApp that beat an interrupted install), it fails
+  // with "Activity does not exist" and never reaches the reinstall. Deferring
+  // launch to the reset block makes a missing app self-heal — it's reinstalled
+  // every test. A user-set `appium:autoLaunch` still wins (merged last below).
+  const isCloudProvider_ = provider === 'browserstack' || provider === 'lambdatest';
+  if (
+    use.resetBetweenTests &&
+    use.buildPath &&
+    use.appBundleId &&
+    !isCloudProvider_ &&
+    !('appium:autoLaunch' in userCaps)
+  ) {
+    caps['appium:autoLaunch'] = false;
+  }
+
   // autoStartDevice: hand Appium what it needs to boot an offline device.
   if (androidAutoBoot) {
     caps['appium:avd'] = use.device.name as string;
