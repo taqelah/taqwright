@@ -1,5 +1,7 @@
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
+import { manifestPath, readManifest } from '../setup/paths.js';
+import { avdHomeDir, isAvdImageInstalled, readAvdSystemImage } from '../setup/avd.js';
 
 const execFileP = promisify(execFile);
 
@@ -24,17 +26,61 @@ export interface DeviceListing {
   android: Device[];
   ios: Device[];
   toolsMissing: { adb?: boolean; emulator?: boolean; xcrun?: boolean };
+  /**
+   * Shutdown Android AVDs hidden from `android` because their system image
+   * isn't in the active (managed) SDK, so the managed emulator can't boot them.
+   * Present only when a managed SDK is active and ≥1 AVD was hidden — lets the
+   * UI explain why and point at the manifest to delete.
+   */
+  hiddenAndroid?: { names: string[]; manifestPath: string };
 }
 
 // ─── Discovery ────────────────────────────────────────────────────
 
 export async function listDevices(): Promise<DeviceListing> {
-  const [android, ios, toolsMissing] = await Promise.all([
+  const [androidAll, ios, toolsMissing] = await Promise.all([
     listAndroid().catch(() => [] as Device[]),
     process.platform === 'darwin' ? listIos().catch(() => [] as Device[]) : Promise.resolve([]),
     detectMissingTools(),
   ]);
-  return { android, ios, toolsMissing };
+  const { android, hiddenAndroid } = await filterAndroidByActiveSdk(androidAll);
+  return { android, ios, toolsMissing, hiddenAndroid };
+}
+
+/**
+ * When a managed SDK is active (a `manifest.json` exists and overrode
+ * `ANDROID_HOME`), drop *shutdown* AVDs whose system image isn't installed in
+ * that SDK — the managed `emulator` can't boot them (it hangs on a never-
+ * resolving "Trying to find <avd>" loop). Booted/online emulators are kept (an
+ * already-running device is usable regardless of which SDK started it). With no
+ * manifest, the user's own SDK is active — return everything unfiltered.
+ */
+async function filterAndroidByActiveSdk(
+  devices: Device[],
+): Promise<{ android: Device[]; hiddenAndroid?: DeviceListing['hiddenAndroid'] }> {
+  const androidHome = process.env.ANDROID_HOME;
+  if (!readManifest() || !androidHome) return { android: devices };
+
+  const avdHome = avdHomeDir();
+  const kept: Device[] = [];
+  const hidden: string[] = [];
+  for (const dev of devices) {
+    // Keep anything already running, or that we can't tie to an AVD config.
+    if (dev.state !== 'shutdown' || !dev.avdName) {
+      kept.push(dev);
+      continue;
+    }
+    const image = await readAvdSystemImage(dev.avdName, avdHome);
+    // Unknown image → don't hide (avoid dropping a device on a parse miss).
+    if (image === undefined || isAvdImageInstalled(image, androidHome)) {
+      kept.push(dev);
+    } else {
+      hidden.push(dev.name);
+    }
+  }
+
+  if (hidden.length === 0) return { android: kept };
+  return { android: kept, hiddenAndroid: { names: hidden, manifestPath: manifestPath() } };
 }
 
 async function detectMissingTools(): Promise<DeviceListing['toolsMissing']> {
