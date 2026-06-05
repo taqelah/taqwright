@@ -49,6 +49,16 @@ export interface EmulatorDeviceConfig {
    * Worker N with no slot in the pool fails fast with a clear error.
    */
   pool?: DevicePoolEntry[];
+  /**
+   * Auto-discover local devices and partition them across `workers` instead
+   * of hand-writing a `pool`. taqwright enumerates the active-SDK AVDs (and
+   * any already-running emulators), cold-boots shutdown ones as needed to
+   * reach the `workers` count, assigns one per worker, and **fails fast** if
+   * fewer are available than `workers`. Mutually exclusive with `pool` and
+   * `udid`. Resolved once at run start (a `globalSetup` hook), so the
+   * concrete device set is frozen before any worker forks.
+   */
+  autoDiscover?: boolean;
 }
 
 export interface LocalDeviceConfig {
@@ -66,6 +76,16 @@ export interface LocalDeviceConfig {
   orientation?: DeviceOrientation;
   /** Same as `EmulatorDeviceConfig.pool` — see that field for docs. */
   pool?: DevicePoolEntry[];
+  /**
+   * Auto-discover connected physical devices and partition them across
+   * `workers`. Android only — enumerates `adb`-online physical devices
+   * (emulators excluded), one per worker, and **fails fast** if fewer are
+   * connected than `workers`. Physical devices can't be booted, so this only
+   * uses what's already plugged in. `local-device` + iOS is not yet
+   * supported (no multi-UDID enumerator). Mutually exclusive with `pool` /
+   * `udid`. See `EmulatorDeviceConfig.autoDiscover` for the resolution model.
+   */
+  autoDiscover?: boolean;
 }
 
 /** Fields shared by cloud device providers (BrowserStack, LambdaTest, …). */
