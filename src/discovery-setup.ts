@@ -1,5 +1,5 @@
 import { Platform } from './types/index.js';
-import { loadTaqwrightConfig } from './config.js';
+import { loadTaqwrightConfig, effectiveWorkers } from './config.js';
 import {
   discoverAssignableDevices,
   selectDevicePool,
@@ -28,8 +28,6 @@ export default async function autoDiscoverGlobalSetup(): Promise<void> {
   const config = await loadTaqwrightConfig();
   if (!config) return;
 
-  const workers = config.workers ?? 1;
-
   for (const project of config.projects) {
     const device = project.use.device as {
       provider?: string;
@@ -39,6 +37,10 @@ export default async function autoDiscoverGlobalSetup(): Promise<void> {
     };
     if (device.autoDiscover !== true) continue;
     if (device.provider !== 'emulator' && device.provider !== 'local-device') continue;
+
+    // Per-project worker count — validate this project's discovered devices
+    // against its own `workers`, not a single global value.
+    const workers = effectiveWorkers(project, config);
 
     const opts: DiscoverOpts = {
       platform: project.use.platform,
