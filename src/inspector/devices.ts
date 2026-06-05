@@ -224,10 +224,14 @@ export async function startAndroidEmulator(avdName: string): Promise<void> {
     throw new Error('`emulator` is not on PATH. Install Android SDK command-line tools and retry.');
   }
   // Detached so the boot survives our process. The user can stop it via
-  // the Devices card or `adb -s <serial> emu kill`.
+  // the Devices card or `adb -s <serial> emu kill`. `windowsHide` suppresses
+  // the extra console window Windows would otherwise allocate for the detached
+  // console-subsystem `emulator.exe` (it dumps verbose config there); no-op on
+  // macOS/Linux. The emulator's own GUI window is unaffected.
   const child = spawn('emulator', ['-avd', avdName], {
     detached: true,
     stdio: 'ignore',
+    windowsHide: true,
   });
   child.unref();
 }
