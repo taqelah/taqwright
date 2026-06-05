@@ -143,6 +143,14 @@ export interface AppiumServerConfig {
   path?: string;
   /** Appium `newCommandTimeout` capability, in seconds. Default: 240. */
   newCommandTimeout?: number;
+  /**
+   * WebDriver client connection/session-creation timeout, in ms (wdio
+   * `connectionRetryTimeout`). Raise it when device allocation is slow — e.g.
+   * many parallel BrowserStack sessions queue for real devices and the default
+   * (120000) aborts the `/session` request. Applies to local + cloud; cloud
+   * defaults to 300000 when unset.
+   */
+  connectionTimeout?: number;
   /** WebDriver client log level. Default: 'warn'. */
   logLevel?: 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'silent';
   /**

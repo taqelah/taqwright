@@ -64,52 +64,53 @@ interface TaqwrightWorkerFixtures {
   deviceProvider: DeviceProvider | null;
 }
 
-/** How many times to (re)attempt local session creation on a transient device blip. */
-const LOCAL_SESSION_ATTEMPTS = 3;
+/** How many times to (re)attempt a local device operation on a transient blip. */
+const LOCAL_RETRY_ATTEMPTS = 3;
 
 /**
- * Create the WebDriver session for a local (emulator / local-device) target,
- * with a per-session readiness gate + bounded retry for Android. A device that
- * was healthy can drop its adb connection mid-run (an "offline" blip under load
- * with multiple emulators); session init (`adb install` + `io.appium.settings`)
- * then fails. Before each attempt we wait (best-effort) for the target serial to
- * be online + PackageManager-ready, and on a transient device error we re-wait
- * and retry rather than failing the test. iOS / non-resolvable targets fall
- * straight through to a single `newSession` — behaviour is unchanged there.
+ * The adb serial for a LOCAL Android target (emulator / local-device), or
+ * `undefined` for iOS, cloud, or a target whose serial can't be resolved yet
+ * (e.g. an autoStartDevice cold start that Appium will boot). Callers use the
+ * `undefined` case to skip the readiness gate and behave exactly as before.
  */
-async function createLocalSession(use: TaqwrightUseOptions): Promise<WebDriverClient> {
+async function localAndroidSerial(use: TaqwrightUseOptions): Promise<string | undefined> {
   const device = use.device as { provider?: string; udid?: string; name?: string | RegExp };
-  const isAndroid = use.platform === Platform.ANDROID;
   const isLocal = device.provider === 'emulator' || device.provider === 'local-device';
-
-  if (!isAndroid || !isLocal) {
-    return WebDriver.newSession(appiumRemoteOptions(use));
-  }
-
+  if (use.platform !== Platform.ANDROID || !isLocal) return undefined;
   const avdName = typeof device.name === 'string' ? device.name : undefined;
-  const serial = await resolveAndroidSerial({ udid: device.udid, avdName });
-  // No known serial (e.g. autoStartDevice cold start, not booted yet) — let
-  // Appium own the boot, exactly as before. No gate, no retry.
-  if (!serial) {
-    return WebDriver.newSession(appiumRemoteOptions(use));
-  }
+  return resolveAndroidSerial({ udid: device.udid, avdName });
+}
 
+/**
+ * Run a device operation with a readiness gate + bounded retry. A local Android
+ * emulator that was healthy can drop its adb connection mid-run (an "offline"
+ * blip under load with multiple emulators), failing session init or the
+ * reset-between-tests reinstall/relaunch. Before each attempt we wait
+ * (best-effort) for `serial` to be online + PackageManager-ready; on a transient
+ * device error we re-wait and retry rather than failing the test. `label` names
+ * the operation in the warning log.
+ */
+async function withDeviceReadyRetry<T>(
+  serial: string,
+  label: string,
+  fn: () => Promise<T>,
+): Promise<T> {
   let lastErr: unknown;
-  for (let attempt = 1; attempt <= LOCAL_SESSION_ATTEMPTS; attempt++) {
+  for (let attempt = 1; attempt <= LOCAL_RETRY_ATTEMPTS; attempt++) {
     const ready = await waitForAndroidDeviceReady(serial);
     if (!ready) {
       logger.warn(
-        `taqwright: ${serial} not reporting ready before session attempt ${attempt}/${LOCAL_SESSION_ATTEMPTS} — trying anyway.`,
+        `taqwright: ${serial} not reporting ready before ${label} attempt ${attempt}/${LOCAL_RETRY_ATTEMPTS} — trying anyway.`,
       );
     }
     try {
-      return await WebDriver.newSession(appiumRemoteOptions(use));
+      return await fn();
     } catch (err) {
       lastErr = err;
       const message = err instanceof Error ? err.message : String(err);
-      if (attempt < LOCAL_SESSION_ATTEMPTS && isTransientDeviceError(message)) {
+      if (attempt < LOCAL_RETRY_ATTEMPTS && isTransientDeviceError(message)) {
         logger.warn(
-          `taqwright: transient device error on ${serial} (attempt ${attempt}/${LOCAL_SESSION_ATTEMPTS}), waiting for it to recover and retrying — ${message}`,
+          `taqwright: transient device error on ${serial} during ${label} (attempt ${attempt}/${LOCAL_RETRY_ATTEMPTS}), waiting for it to recover and retrying — ${message}`,
         );
         continue;
       }
@@ -118,6 +119,18 @@ async function createLocalSession(use: TaqwrightUseOptions): Promise<WebDriverCl
   }
   // Unreachable in practice (the loop returns or throws), but satisfies control flow.
   throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
+}
+
+/**
+ * Create the WebDriver session for a local target, with the readiness gate +
+ * retry for Android. iOS / non-resolvable targets fall straight through to a
+ * single `newSession` — behaviour is unchanged there.
+ */
+async function createLocalSession(use: TaqwrightUseOptions): Promise<WebDriverClient> {
+  const newSession = () => WebDriver.newSession(appiumRemoteOptions(use));
+  const serial = await localAndroidSerial(use);
+  if (!serial) return newSession();
+  return withDeviceReadyRetry(serial, 'session creation', newSession);
 }
 
 /**
@@ -356,14 +369,23 @@ export const test = baseTest.extend<TaqwrightFixtures, TaqwrightWorkerFixtures>(
     // reinstall per session).
     if (!isCloud && taqwrightUse.resetBetweenTests && bundleId && taqwrightUse.buildPath) {
       const appRef = platform === Platform.IOS ? { bundleId } : { appId: bundleId };
-      await rawDriver.executeScript('mobile: terminateApp', [appRef]).catch(() => {});
-      await rawDriver.executeScript('mobile: removeApp', [appRef]).catch(() => {});
       const installArg =
         platform === Platform.IOS
           ? { app: taqwrightUse.buildPath }
           : { appPath: taqwrightUse.buildPath };
-      await rawDriver.executeScript('mobile: installApp', [installArg]);
-      await rawDriver.executeScript('mobile: activateApp', [appRef]);
+      // The reinstall/relaunch dance is idempotent (removeApp → installApp), so
+      // it's safe to retry as a unit when a local Android emulator drops offline
+      // mid-reset. Same gate+retry as session creation; iOS/cloud (no serial)
+      // run it once, unguarded — unchanged behaviour.
+      const doReset = async () => {
+        await rawDriver.executeScript('mobile: terminateApp', [appRef]).catch(() => {});
+        await rawDriver.executeScript('mobile: removeApp', [appRef]).catch(() => {});
+        await rawDriver.executeScript('mobile: installApp', [installArg]);
+        await rawDriver.executeScript('mobile: activateApp', [appRef]);
+      };
+      const serial = await localAndroidSerial(taqwrightUse);
+      if (serial) await withDeviceReadyRetry(serial, 'reset-between-tests', doReset);
+      else await doReset();
     }
 
     const mobile = Mobile.wrap(rawDriver, platform, bundleId, timeout);
