@@ -1,8 +1,8 @@
 import { existsSync, mkdirSync, renameSync, rmSync } from 'node:fs';
-import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { androidSdkDir, downloadCacheDir } from './paths.js';
 import { download, extract } from './archive.js';
+import { spawnTool } from './spawn-tool.js';
 
 // Android cmdline-tools build pinned for reproducible host installs.
 const CMDLINE_VERSION = '11076708';
@@ -30,7 +30,7 @@ function runTool(
   feedYes = false,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    const p = spawn(cmd, args, {
+    const p = spawnTool(cmd, args, {
       stdio: [feedYes ? 'pipe' : 'ignore', 'ignore', 'inherit'],
       env,
     });
