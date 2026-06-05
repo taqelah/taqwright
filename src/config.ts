@@ -1,6 +1,6 @@
 import { access } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { PlaywrightTestConfig } from '@playwright/test';
 import { Platform, type TaqwrightConfig } from './types/index.js';
 
@@ -84,6 +84,27 @@ export function defineConfig(config: TaqwrightConfig): PlaywrightConfigWithEmbed
   const autoStartMisconfig = findAutoStartDeviceMisconfig(config);
   if (autoStartMisconfig) throw new Error(autoStartMisconfig);
 
+  const autoDiscoverMisconfig = findAutoDiscoverMisconfig(config);
+  if (autoDiscoverMisconfig) throw new Error(autoDiscoverMisconfig);
+
+  // When any project opts into auto-discovery, prepend our internal
+  // globalSetup hook (it resolves + freezes the per-worker device pool before
+  // any worker forks) while preserving the user's own globalSetup. Zero
+  // overhead — and no hook injected — when nobody opts in.
+  const hasAutoDiscover = config.projects.some(
+    (p) => (p.use.device as { autoDiscover?: boolean }).autoDiscover === true,
+  );
+  let globalSetup = config.globalSetup;
+  if (hasAutoDiscover) {
+    const internal = fileURLToPath(new URL('./discovery-setup.js', import.meta.url));
+    const existing = config.globalSetup
+      ? Array.isArray(config.globalSetup)
+        ? config.globalSetup
+        : [config.globalSetup]
+      : [];
+    globalSetup = [internal, ...existing];
+  }
+
   // Honor the user's `workers` setting. We previously hardcoded `1` to
   // prevent device contention, but with `device.pool` the fixture can
   // partition devices/Appiums/driver-ports per worker safely. Without a
@@ -100,7 +121,7 @@ export function defineConfig(config: TaqwrightConfig): PlaywrightConfigWithEmbed
     testMatch: config.testMatch,
     testIgnore: config.testIgnore,
     reporter: config.reporter as PlaywrightTestConfig['reporter'],
-    globalSetup: config.globalSetup,
+    globalSetup,
     globalTeardown: config.globalTeardown,
     projects: config.projects.map((p) => ({
       name: p.name,
@@ -152,6 +173,9 @@ export function findParallelMisconfig(config: TaqwrightConfig): string | null {
     if (device.provider !== 'emulator' && device.provider !== 'local-device') {
       continue;
     }
+    // Auto-discover resolves its pool at runtime (in the globalSetup hook),
+    // so there's nothing to validate here — fail-fast happens there instead.
+    if (device.autoDiscover === true) continue;
     const pool = device.pool;
     if (!pool || pool.length === 0) {
       problems.push(
@@ -193,6 +217,8 @@ export function findAutoStartDeviceMisconfig(config: TaqwrightConfig): string | 
     if (device.provider !== 'emulator' || use.platform !== Platform.ANDROID) {
       continue;
     }
+    // Auto-discover supplies concrete AVD names at runtime — nothing to check.
+    if ((device as { autoDiscover?: boolean }).autoDiscover === true) continue;
     const pool = (device as { pool?: Array<{ name?: string }> }).pool;
     const ok = pool
       ? pool.every((e) => typeof e.name === 'string' && e.name.length > 0)
@@ -206,6 +232,64 @@ export function findAutoStartDeviceMisconfig(config: TaqwrightConfig): string | 
           `'Pixel_7_API_34' — see \`emulator -list-avds\`). A RegExp ` +
           `\`device.name\` can't be booted. Set a string name, or remove ` +
           `\`appium.autoStartDevice\`.`,
+      );
+    }
+  }
+  return problems.length ? `taqwright: ${problems.join('\ntaqwright: ')}` : null;
+}
+
+/**
+ * Validate `device.autoDiscover` usage. It auto-resolves a per-worker pool of
+ * local devices at run start, so it's mutually exclusive with a hand-written
+ * `pool` / `udid`, only applies to local providers, and (v1) doesn't cover
+ * physical iOS. Returns an actionable error (one line per offending project,
+ * `taqwright:`-prefixed) or `null`. `defineConfig` throws on a non-null result.
+ */
+export function findAutoDiscoverMisconfig(config: TaqwrightConfig): string | null {
+  const problems: string[] = [];
+  for (const project of config.projects) {
+    const device = project.use.device as {
+      provider: string;
+      autoDiscover?: boolean;
+      pool?: unknown[];
+      udid?: string;
+    };
+    if (device.autoDiscover !== true) continue;
+
+    if (device.provider !== 'emulator' && device.provider !== 'local-device') {
+      problems.push(
+        `\`device.autoDiscover\` is set on project "${project.name}" but its ` +
+          `provider is "${device.provider}". Auto-discovery is for local ` +
+          `providers only (emulator / local-device); cloud grids manage their ` +
+          `own device queueing — remove \`autoDiscover\`.`,
+      );
+      continue;
+    }
+    if ((device.pool && device.pool.length > 0) || device.udid) {
+      problems.push(
+        `\`device.autoDiscover\` on project "${project.name}" is mutually ` +
+          `exclusive with \`device.${device.pool?.length ? 'pool' : 'udid'}\` — ` +
+          `set one or the other. autoDiscover resolves the device set for you.`,
+      );
+      continue;
+    }
+    if (device.provider === 'local-device' && project.use.platform === Platform.IOS) {
+      problems.push(
+        `\`device.autoDiscover\` on project "${project.name}" is not yet ` +
+          `supported for local-device + iOS — there's no multi-device ` +
+          `enumerator for physical iPhones. Set \`device.udid\` or \`device.pool\`.`,
+      );
+      continue;
+    }
+    if (
+      device.provider === 'emulator' &&
+      project.use.platform === Platform.ANDROID &&
+      project.use.appium?.autoStartDevice === false
+    ) {
+      problems.push(
+        `\`device.autoDiscover\` on project "${project.name}" needs ` +
+          `\`appium.autoStartDevice\` to boot/attach AVDs, but it's set to ` +
+          `false. Remove \`appium.autoStartDevice: false\`.`,
       );
     }
   }
