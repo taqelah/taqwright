@@ -285,6 +285,18 @@ export interface TaqwrightProjectConfig extends TestRunnerOptions {
   grep?: RegExp | Array<RegExp>;
   grepInvert?: RegExp | Array<RegExp>;
   dependencies?: string[];
+  /**
+   * Number of parallel test workers for *this* project — the project's tests
+   * are distributed across that many devices. Must be `<= device.pool.length`
+   * (or the number of devices `device.autoDiscover` resolves); `defineConfig`
+   * throws at config load otherwise. Falls back to the top-level
+   * `config.workers ?? 1` when omitted.
+   *
+   * Because Playwright's worker pool is global, the canonical way to run a
+   * per-project worker count is `taqwright test --project=<name>` — the CLI
+   * sizes Playwright's global pool to this project's `workers`.
+   */
+  workers?: number;
 }
 
 export interface TaqwrightConfig extends TestRunnerOptions {
@@ -295,13 +307,17 @@ export interface TaqwrightConfig extends TestRunnerOptions {
    */
   expectTimeout?: number;
   /**
-   * Number of parallel test workers. Defaults to `1` (serial). Each
-   * worker gets one device from `project.use.device.pool`. Set
-   * `workers > 1` only together with a `device.pool` of at least
-   * `workers` entries on every emulator / local-device project —
-   * otherwise `defineConfig` throws at config load (Playwright cannot
-   * run two workers against the same Appium + same device safely).
-   * Cloud providers manage their own queueing and are exempt.
+   * Fallback default worker count, applied to any project that omits its own
+   * `project.workers`. Defaults to `1` (serial). A worker > 1 needs a
+   * `device.pool` (or `device.autoDiscover`) with at least that many entries
+   * on every emulator / local-device project it applies to — otherwise
+   * `defineConfig` throws at config load (Playwright cannot run two workers
+   * against the same Appium + same device safely). Cloud providers manage
+   * their own queueing and are exempt.
+   *
+   * Prefer setting `workers` per project (see `TaqwrightProjectConfig.workers`);
+   * this top-level value just supplies a default. The global Playwright pool is
+   * sized to the max effective workers across projects.
    */
   workers?: number;
   fullyParallel?: boolean;
