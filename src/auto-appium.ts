@@ -4,6 +4,15 @@ import type { ChildProcess } from 'node:child_process';
 import { loadTaqwrightConfig } from './config.js';
 import { startAppiumServer, killAppiumOnPort } from './providers/appium.js';
 import { isCloudProvider } from './providers/index.js';
+import type { TaqwrightConfig } from './types/index.js';
+
+/** A local Appium server the CLI should pre-start before the run. */
+export interface AutoStartTarget {
+  name: string;
+  host: string;
+  port: number;
+  basePath?: string;
+}
 
 export async function isPortOpen(host: string, port: number, timeoutMs = 500): Promise<boolean> {
   return new Promise((resolve) => {
@@ -29,9 +38,12 @@ async function waitForPortClosed(host: string, port: number, timeoutMs = 5000): 
 }
 
 /**
- * For every project with `appium.autoStart === true`, probe its host:port.
- * If nothing is listening, spawn Appium and wait for it to come up.
- * Returns the list of spawned children (may be empty).
+ * Pure selection: which projects the CLI should pre-start a local Appium for.
+ *
+ * Includes only single-device projects with `appium.autoStart === true`.
+ * Excludes cloud projects (remote grid) and pool / autoDiscover projects (the
+ * per-worker fixture spawns their Appium on staggered `basePort + idx` ports,
+ * so the CLI must not pre-bind for them).
  *
  * When `projectFilter` is non-empty, only projects whose name matches are
  * considered — this prevents two parallel `taqwright test --project=A` /
@@ -42,31 +54,34 @@ async function waitForPortClosed(host: string, port: number, timeoutMs = 5000): 
  * projects on distinct ports (e.g. parallel iOS sims on 4725 / 4726) each
  * get their own.
  */
-export async function maybeAutoStartAppium(
-  configPath: string,
+export function autoStartTargets(
+  cfg: TaqwrightConfig,
   projectFilter: string[] = [],
-): Promise<ChildProcess[]> {
-  const cfg = await loadTaqwrightConfig(dirname(configPath));
-  if (!cfg) return [];
-  // If any project declares a device pool, the per-worker fixture spawns
-  // Appium itself on staggered ports — a single CLI-level pre-spawn would
-  // bind the base port and prevent worker 0 from getting it.
-  const hasPool = cfg.projects.some((p) => {
-    const pool = (p.use?.device as { pool?: unknown[] } | undefined)?.pool;
-    return Array.isArray(pool) && pool.length > 0;
-  });
-  if (hasPool) return [];
-
+): AutoStartTarget[] {
   const filterSet = new Set(projectFilter);
-  const procs: ChildProcess[] = [];
   const seen = new Set<string>();
+  const targets: AutoStartTarget[] = [];
+
   for (const project of cfg.projects) {
     if (filterSet.size > 0 && !filterSet.has(project.name ?? '')) continue;
 
+    const device = project.use?.device as
+      | { provider?: string; pool?: unknown[]; autoDiscover?: boolean }
+      | undefined;
+
     // Cloud projects run on a remote grid, not a local Appium — a stray
     // `appium.autoStart` on one must never spawn a useless server.
-    const provider = (project.use?.device as { provider?: string } | undefined)?.provider;
-    if (isCloudProvider(provider)) continue;
+    if (isCloudProvider(device?.provider)) continue;
+
+    // Pool / autoDiscover projects spawn their own Appium per worker on
+    // staggered ports (basePort + parallelIndex) inside the fixture, so the
+    // CLI must not pre-bind for them. Single-device projects do NOT self-spawn
+    // and rely on this pre-start — so pre-start those even when a pool project
+    // sits elsewhere in the same config (the per-project guard; a previous
+    // global one disabled pre-start for the whole config if any project had a
+    // pool, leaving single-device projects with no Appium).
+    const hasPool = Array.isArray(device?.pool) && device.pool.length > 0;
+    if (hasPool || device?.autoDiscover === true) continue;
 
     const appium = project.use?.appium;
     if (!appium?.autoStart) continue;
@@ -77,6 +92,28 @@ export async function maybeAutoStartAppium(
     if (seen.has(key)) continue;
     seen.add(key);
 
+    targets.push({ name: project.name ?? '', host, port, basePath: appium.path });
+  }
+
+  return targets;
+}
+
+/**
+ * For each project selected by {@link autoStartTargets}, probe its host:port;
+ * if nothing is listening, spawn Appium and wait for it to come up. A stale
+ * Appium on the port is killed and restarted; a non-Appium listener is left
+ * untouched. Returns the spawned children (may be empty) for the caller to
+ * kill after the run.
+ */
+export async function maybeAutoStartAppium(
+  configPath: string,
+  projectFilter: string[] = [],
+): Promise<ChildProcess[]> {
+  const cfg = await loadTaqwrightConfig(dirname(configPath));
+  if (!cfg) return [];
+
+  const procs: ChildProcess[] = [];
+  for (const { host, port, basePath } of autoStartTargets(cfg, projectFilter)) {
     if (await isPortOpen(host, port)) {
       const killed = await killAppiumOnPort(port);
       if (killed) {
@@ -93,7 +130,7 @@ export async function maybeAutoStartAppium(
     }
 
     console.log(`taqwright: starting Appium server on ${host}:${port}…`);
-    const proc = await startAppiumServer('unknown', { host, port, basePath: appium.path });
+    const proc = await startAppiumServer('unknown', { host, port, basePath });
     procs.push(proc);
   }
   return procs;
