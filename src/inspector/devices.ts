@@ -327,6 +327,63 @@ export async function ensureAndroidAvdReady(
   );
 }
 
+/**
+ * Best-effort wait for an already-known emulator/device serial to be online
+ * (adb state `device`, not `offline`) AND fully ready (boot_completed +
+ * PackageManager). Unlike {@link ensureAndroidAvdReady} this never boots and
+ * never throws — it returns `false` on timeout so the caller can decide. Used
+ * as a per-session gate to ride out a transient mid-run "device offline" blip
+ * before (re)creating the WebDriver session.
+ */
+export async function waitForAndroidDeviceReady(
+  serial: string,
+  opts: { timeoutMs?: number } = {},
+): Promise<boolean> {
+  const timeoutMs = opts.timeoutMs ?? 60_000;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    // onlineAdbDevices only lists serials in adb state `device` — an `offline`
+    // (or absent) serial won't appear, so this also waits out offline→online.
+    if ((await onlineAdbDevices()).has(serial) && (await isAndroidDeviceReady(serial))) {
+      return true;
+    }
+    await sleep(1500);
+  }
+  return false;
+}
+
+/**
+ * Resolve the adb serial for an Android target: the configured `udid` when it's
+ * a real serial, otherwise the serial of the online emulator running `avdName`.
+ * Returns `undefined` when nothing matches (e.g. an autoStartDevice cold start
+ * where the emulator isn't up yet — Appium owns that boot).
+ */
+export async function resolveAndroidSerial(opts: {
+  udid?: string;
+  avdName?: string;
+}): Promise<string | undefined> {
+  const { udid, avdName } = opts;
+  if (udid && !udid.startsWith('avd:')) return udid;
+  if (avdName) return findSerialForAvd(await onlineAdbDevices(), avdName);
+  return undefined;
+}
+
+/**
+ * Does this WebDriver/adb error look like a transient device blip worth
+ * retrying (vs a deterministic failure like a bad APK or a real test error)?
+ * Pure — classifies by message signature.
+ */
+export function isTransientDeviceError(message: string): boolean {
+  return [
+    /device offline/i,
+    /was not in the list of connected devices/i,
+    /io\.appium\.settings/i,
+    /error executing adbexec/i,
+    /cannot start the .* application/i,
+    /device unauthorized/i,
+  ].some((re) => re.test(message));
+}
+
 // ─── iOS ──────────────────────────────────────────────────────────
 
 async function listIos(): Promise<Device[]> {
