@@ -1,13 +1,12 @@
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { appiumDir, appiumHomeDir } from './paths.js';
 import { installDriver } from '../providers/appium.js';
+import { spawnTool } from './spawn-tool.js';
 
 function npm(args: string[], cwd: string, env: NodeJS.ProcessEnv): Promise<void> {
-  const cmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
   return new Promise((resolve, reject) => {
-    const p = spawn(cmd, args, { cwd, env, stdio: ['ignore', 'ignore', 'inherit'] });
+    const p = spawnTool('npm', args, { cwd, env, stdio: ['ignore', 'ignore', 'inherit'] });
     p.on('exit', (code) =>
       code === 0 ? resolve() : reject(new Error(`npm ${args.join(' ')} exited with code ${code}`)),
     );

@@ -6,6 +6,7 @@ import { Platform } from '../types/index.js';
 import { logger } from '../logger.js';
 import { getLatestBuildToolsVersions } from '../utils.js';
 import { managedEnv } from '../setup/paths.js';
+import { spawnTool } from '../setup/spawn-tool.js';
 
 const execP = promisify(exec);
 
@@ -24,12 +25,15 @@ export async function installDriver(
   const cmd = opts.appiumPath ?? 'npx';
   const prefix = opts.appiumPath ? [] : ['appium'];
   await new Promise<void>((resolve) => {
-    const p = spawn(cmd, [...prefix, 'driver', 'uninstall', driverName], { stdio: 'pipe', env });
+    const p = spawnTool(cmd, [...prefix, 'driver', 'uninstall', driverName], {
+      stdio: 'pipe',
+      env,
+    });
     p.on('exit', () => resolve());
     p.on('error', () => resolve());
   });
   await new Promise<void>((resolve, reject) => {
-    const p = spawn(cmd, [...prefix, 'driver', 'install', driverName], { stdio: 'pipe', env });
+    const p = spawnTool(cmd, [...prefix, 'driver', 'install', driverName], { stdio: 'pipe', env });
     p.on('exit', (code) =>
       code === 0
         ? resolve()
@@ -87,18 +91,37 @@ function spawnAppium(cmd: string, args: string[], provider: string): Promise<Chi
     // spawned server + its UiAutomator2 driver find the vendored adb/JDK.
     // No-op when setup hasn't run. Covers the inspector-server path too
     // (it doesn't go through the CLI entry's applyManagedEnv()).
-    const proc = spawn(cmd, args, {
+    const proc = spawnTool(cmd, args, {
       stdio: 'pipe',
       env: { ...process.env, ...(managedEnv() ?? {}) },
     });
+    let settled = false;
+    let stderrText = '';
     proc.stderr?.on('data', (data: Buffer) => {
-      logger.warn(data.toString().trimEnd());
+      const text = data.toString();
+      stderrText += text;
+      logger.warn(text.trimEnd());
+    });
+    // On Windows we go through `shell: true`, so a missing binary does not emit
+    // an `ENOENT` error event — the shell just exits non-zero. Surface that as
+    // an ENOENT-tagged error before the server is up so startAppiumServer's
+    // `appium` -> `npx appium` fallback still fires. POSIX keeps the direct
+    // `error` event below.
+    proc.on('exit', (code) => {
+      if (settled) return;
+      settled = true;
+      const err: NodeJS.ErrnoException = new Error(
+        `Appium server "${cmd}" exited with code ${code ?? 'null'} before starting.`,
+      );
+      if (/not recognized|not found|ENOENT/i.test(stderrText)) err.code = 'ENOENT';
+      reject(err);
     });
     proc.stdout?.on('data', async (data: Buffer) => {
       const output = data.toString();
       logger.log(output.trimEnd());
 
       if (output.includes('Error: listen EADDRINUSE')) {
+        settled = true;
         reject(
           new Error('Appium server is already running on this port. Stop it before running tests.'),
         );
@@ -111,11 +134,16 @@ function spawnAppium(cmd: string, args: string[], provider: string): Promise<Chi
         }
       }
       if (output.includes('Appium REST http interface listener started')) {
+        settled = true;
         logger.log('Appium server is up and running.');
         resolve(proc);
       }
     });
-    proc.on('error', (err) => reject(err));
+    proc.on('error', (err) => {
+      if (settled) return;
+      settled = true;
+      reject(err);
+    });
     process.on('exit', () => proc.kill());
   });
 }
