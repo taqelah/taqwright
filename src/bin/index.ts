@@ -172,6 +172,11 @@ program
     'auto-install the Android toolchain after scaffolding (skips the prompt)',
   )
   .option('--no-install-toolchain', 'skip the Android-toolchain prompt entirely')
+  .option(
+    '--with-avd',
+    'also create an Android emulator (system image + AVD) when installing the toolchain',
+  )
+  .option('--no-with-avd', 'skip the emulator prompt')
   .option('--demo-app', 'download the demo APK so the example test runs out of the box')
   .option('--no-demo-app', 'skip the demo-app prompt entirely')
   .action(
@@ -183,6 +188,7 @@ program
         install?: boolean;
         yes?: boolean;
         installToolchain?: boolean;
+        withAvd?: boolean;
         demoApp?: boolean;
       },
     ) => {
@@ -198,6 +204,7 @@ program
         install: opts.install,
         yes: opts.yes,
         installToolchain: opts.installToolchain,
+        withAvd: opts.withAvd,
         demoApp: opts.demoApp,
       });
     },
