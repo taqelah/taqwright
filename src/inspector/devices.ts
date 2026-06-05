@@ -243,6 +243,90 @@ export async function stopAndroidEmulator(serial: string): Promise<void> {
   await execFileP('adb', ['-s', serial, 'emu', 'kill']);
 }
 
+/** First online serial whose resolved AVD name matches `avdName` (exact). */
+export function findSerialForAvd(
+  online: Map<string, { avdName?: string }>,
+  avdName: string,
+): string | undefined {
+  for (const [serial, info] of online) {
+    if (info.avdName === avdName) return serial;
+  }
+  return undefined;
+}
+
+/** Is the device fully ready for app install — booted AND PackageManager up? */
+async function isAndroidDeviceReady(serial: string): Promise<boolean> {
+  try {
+    const { stdout: booted } = await execFileP('adb', [
+      '-s',
+      serial,
+      'shell',
+      'getprop',
+      'sys.boot_completed',
+    ]);
+    if (booted.trim() !== '1') return false;
+    // `pm path android` only answers once the PackageManager is up; this is the
+    // gate that prevents the "device offline" / failed `adb install` race where
+    // an emulator reports online before its package service is ready.
+    const { stdout: pmPath } = await execFileP('adb', [
+      '-s',
+      serial,
+      'shell',
+      'pm',
+      'path',
+      'android',
+    ]);
+    return pmPath.includes('package:');
+  } catch {
+    return false;
+  }
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Ensure an emulator running `avdName` exists and is fully ready for app
+ * install, booting it (`emulator -avd <name>`) if it isn't online yet.
+ * Resolves with the device serial. Booting before any worker session avoids the
+ * race where N workers cold-boot their AVDs concurrently and one starts
+ * installing before its PackageManager is ready. Mirrors the iOS pre-boot in
+ * `discovery-setup.ts`.
+ */
+export async function ensureAndroidAvdReady(
+  avdName: string,
+  opts: { timeoutMs?: number } = {},
+): Promise<string> {
+  const timeoutMs = opts.timeoutMs ?? 180_000;
+  const deadline = Date.now() + timeoutMs;
+
+  let serial = findSerialForAvd(await onlineAdbDevices(), avdName);
+  if (!serial) {
+    await startAndroidEmulator(avdName);
+    // Wait for the freshly-booted emulator's serial to show up in adb.
+    while (!serial && Date.now() < deadline) {
+      await sleep(2000);
+      serial = findSerialForAvd(await onlineAdbDevices(), avdName);
+    }
+    if (!serial) {
+      throw new Error(
+        `taqwright: AVD "${avdName}" did not come online within ${Math.round(timeoutMs / 1000)}s.`,
+      );
+    }
+  }
+
+  await execFileP('adb', ['-s', serial, 'wait-for-device']).catch(() => {
+    /* fall through to the readiness poll */
+  });
+  while (Date.now() < deadline) {
+    if (await isAndroidDeviceReady(serial)) return serial;
+    await sleep(2000);
+  }
+  throw new Error(
+    `taqwright: emulator ${serial} (AVD "${avdName}") was not ready (boot_completed + ` +
+      `PackageManager) within ${Math.round(timeoutMs / 1000)}s.`,
+  );
+}
+
 // ─── iOS ──────────────────────────────────────────────────────────
 
 async function listIos(): Promise<Device[]> {

@@ -127,15 +127,30 @@ export function defineConfig(config: TaqwrightConfig): PlaywrightConfigWithEmbed
   const autoDiscoverMisconfig = findAutoDiscoverMisconfig(config);
   if (autoDiscoverMisconfig) throw new Error(autoDiscoverMisconfig);
 
-  // When any project opts into auto-discovery, prepend our internal
-  // globalSetup hook (it resolves + freezes the per-worker device pool before
-  // any worker forks) while preserving the user's own globalSetup. Zero
+  // When any project opts into auto-discovery — or has a static Android
+  // emulator `pool` with `autoStartDevice` — prepend our internal globalSetup
+  // hook (it resolves the per-worker pool and pre-boots the assigned devices
+  // before any worker forks) while preserving the user's own globalSetup. Zero
   // overhead — and no hook injected — when nobody opts in.
   const hasAutoDiscover = config.projects.some(
     (p) => (p.use.device as { autoDiscover?: boolean }).autoDiscover === true,
   );
+  const hasAndroidPoolAutoBoot = config.projects.some((p) => {
+    const device = p.use.device as {
+      provider?: string;
+      pool?: Array<{ name?: unknown }>;
+    };
+    return (
+      p.use.platform === Platform.ANDROID &&
+      device.provider === 'emulator' &&
+      Array.isArray(device.pool) &&
+      device.pool.length > 0 &&
+      device.pool.every((e) => typeof e.name === 'string' && e.name.length > 0) &&
+      p.use.appium?.autoStartDevice !== false
+    );
+  });
   let globalSetup = config.globalSetup;
-  if (hasAutoDiscover) {
+  if (hasAutoDiscover || hasAndroidPoolAutoBoot) {
     const internal = fileURLToPath(new URL('./discovery-setup.js', import.meta.url));
     const existing = config.globalSetup
       ? Array.isArray(config.globalSetup)
