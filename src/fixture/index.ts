@@ -15,6 +15,12 @@ import { resolvedPoolEnvKey } from '../discovery.js';
 import { appiumRemoteOptions } from '../capabilities.js';
 import { isPortOpen } from '../auto-appium.js';
 import { startAppiumServer } from '../providers/appium.js';
+import {
+  resolveAndroidSerial,
+  waitForAndroidDeviceReady,
+  isTransientDeviceError,
+} from '../inspector/devices.js';
+import { logger } from '../logger.js';
 import { createDeviceProvider, isCloudProvider } from '../providers/index.js';
 import { Tracer } from '../tracer/index.js';
 import { wrapForTracing } from '../tracer/proxy.js';
@@ -56,6 +62,62 @@ interface TaqwrightWorkerFixtures {
   // provider's one-time `globalSetup()` (creds check + build upload) runs once
   // per worker, not per test.
   deviceProvider: DeviceProvider | null;
+}
+
+/** How many times to (re)attempt local session creation on a transient device blip. */
+const LOCAL_SESSION_ATTEMPTS = 3;
+
+/**
+ * Create the WebDriver session for a local (emulator / local-device) target,
+ * with a per-session readiness gate + bounded retry for Android. A device that
+ * was healthy can drop its adb connection mid-run (an "offline" blip under load
+ * with multiple emulators); session init (`adb install` + `io.appium.settings`)
+ * then fails. Before each attempt we wait (best-effort) for the target serial to
+ * be online + PackageManager-ready, and on a transient device error we re-wait
+ * and retry rather than failing the test. iOS / non-resolvable targets fall
+ * straight through to a single `newSession` — behaviour is unchanged there.
+ */
+async function createLocalSession(use: TaqwrightUseOptions): Promise<WebDriverClient> {
+  const device = use.device as { provider?: string; udid?: string; name?: string | RegExp };
+  const isAndroid = use.platform === Platform.ANDROID;
+  const isLocal = device.provider === 'emulator' || device.provider === 'local-device';
+
+  if (!isAndroid || !isLocal) {
+    return WebDriver.newSession(appiumRemoteOptions(use));
+  }
+
+  const avdName = typeof device.name === 'string' ? device.name : undefined;
+  const serial = await resolveAndroidSerial({ udid: device.udid, avdName });
+  // No known serial (e.g. autoStartDevice cold start, not booted yet) — let
+  // Appium own the boot, exactly as before. No gate, no retry.
+  if (!serial) {
+    return WebDriver.newSession(appiumRemoteOptions(use));
+  }
+
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= LOCAL_SESSION_ATTEMPTS; attempt++) {
+    const ready = await waitForAndroidDeviceReady(serial);
+    if (!ready) {
+      logger.warn(
+        `taqwright: ${serial} not reporting ready before session attempt ${attempt}/${LOCAL_SESSION_ATTEMPTS} — trying anyway.`,
+      );
+    }
+    try {
+      return await WebDriver.newSession(appiumRemoteOptions(use));
+    } catch (err) {
+      lastErr = err;
+      const message = err instanceof Error ? err.message : String(err);
+      if (attempt < LOCAL_SESSION_ATTEMPTS && isTransientDeviceError(message)) {
+        logger.warn(
+          `taqwright: transient device error on ${serial} (attempt ${attempt}/${LOCAL_SESSION_ATTEMPTS}), waiting for it to recover and retrying — ${message}`,
+        );
+        continue;
+      }
+      throw err;
+    }
+  }
+  // Unreachable in practice (the loop returns or throws), but satisfies control flow.
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
 }
 
 /**
@@ -220,7 +282,7 @@ export const test = baseTest.extend<TaqwrightFixtures, TaqwrightWorkerFixtures>(
   rawDriver: async ({ taqwrightUse, deviceProvider, networkProxy }, use, testInfo) => {
     // Local/emulator: unchanged inline-capabilities path.
     if (!deviceProvider) {
-      const driver = await WebDriver.newSession(appiumRemoteOptions(taqwrightUse));
+      const driver = await createLocalSession(taqwrightUse);
       // Once the session is up, the udid is known. Install the CA + set
       // the device-side proxy now, before any user-test code runs. All
       // failures are recorded on `networkProxy.attemptLog` and produce a
