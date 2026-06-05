@@ -12,6 +12,8 @@ import {
   findParallelMisconfig,
   findAutoStartDeviceMisconfig,
   findAutoDiscoverMisconfig,
+  effectiveWorkers,
+  resolveCliWorkers,
   TAQWRIGHT_KEY,
 } from '../dist/config.js';
 import { buildCapabilities } from '../dist/capabilities.js';
@@ -205,6 +207,214 @@ describe('defineConfig — parallel/pool validation', () => {
   test('error message uses the `taqwright:` prefix', () => {
     const msg = findParallelMisconfig(mkConfig({ workers: 2 }));
     assert.ok(msg.startsWith('taqwright: '));
+  });
+});
+
+// A 2-entry emulator pool — enough for `workers: 2`.
+const POOL2 = [{ udid: 'emulator-5554' }, { udid: 'emulator-5556' }];
+
+describe('effectiveWorkers — precedence', () => {
+  const cfg = { workers: 4, projects: [] };
+  test('project.workers wins over config.workers', () => {
+    assert.equal(effectiveWorkers({ name: 'a', workers: 2 }, cfg), 2);
+  });
+  test('falls back to config.workers when project omits it', () => {
+    assert.equal(effectiveWorkers({ name: 'a' }, cfg), 4);
+  });
+  test('falls back to 1 when neither is set', () => {
+    assert.equal(effectiveWorkers({ name: 'a' }, { projects: [] }), 1);
+  });
+});
+
+describe('defineConfig — global workers = max(effectiveWorkers)', () => {
+  test('single project.workers sizes the global pool', () => {
+    const pw = defineConfig(
+      mkConfig({
+        projects: [
+          {
+            name: 'android',
+            workers: 2,
+            use: { platform: Platform.ANDROID, device: { provider: 'emulator', pool: POOL2 } },
+          },
+        ],
+      }),
+    );
+    assert.equal(pw.workers, 2);
+  });
+
+  test('global pool = the max across projects', () => {
+    const pw = defineConfig(
+      mkConfig({
+        projects: [
+          {
+            name: 'a',
+            workers: 2,
+            use: { platform: Platform.ANDROID, device: { provider: 'emulator', pool: POOL2 } },
+          },
+          {
+            name: 'b',
+            workers: 3,
+            use: {
+              platform: Platform.IOS,
+              device: { provider: 'browserstack', name: 'iPhone 15', osVersion: '17' },
+            },
+          },
+        ],
+      }),
+    );
+    assert.equal(pw.workers, 3);
+  });
+
+  test('project without workers falls back to top-level for the cap', () => {
+    const pw = defineConfig(
+      mkConfig({
+        workers: 2,
+        projects: [proj('android', { provider: 'emulator', pool: POOL2 })],
+      }),
+    );
+    assert.equal(pw.workers, 2);
+  });
+
+  test('no workers anywhere → 1', () => {
+    assert.equal(defineConfig(mkConfig()).workers, 1);
+  });
+});
+
+describe('findParallelMisconfig — per-project workers', () => {
+  test('project.workers validated against its own pool (throws naming it)', () => {
+    const cfg = mkConfig({
+      projects: [
+        {
+          name: 'short',
+          workers: 3,
+          use: { platform: Platform.ANDROID, device: { provider: 'emulator', pool: POOL2 } },
+        },
+      ],
+    });
+    const msg = findParallelMisconfig(cfg);
+    assert.match(msg, /project "short"/);
+    assert.match(msg, /only 2 entr/);
+    assert.throws(() => defineConfig(cfg), /project "short"/);
+  });
+
+  test('sibling project with workers: 1 + no pool is exempt', () => {
+    const cfg = mkConfig({
+      projects: [
+        {
+          name: 'parallel',
+          workers: 2,
+          use: { platform: Platform.ANDROID, device: { provider: 'emulator', pool: POOL2 } },
+        },
+        {
+          name: 'serial',
+          workers: 1,
+          use: { platform: Platform.IOS, device: { provider: 'emulator' } },
+        },
+      ],
+    });
+    assert.equal(findParallelMisconfig(cfg), null);
+    assert.doesNotThrow(() => defineConfig(cfg));
+  });
+
+  test('project.workers: 2 + no pool throws even when top-level is 1 (stricter)', () => {
+    const cfg = mkConfig({
+      workers: 1,
+      projects: [
+        {
+          name: 'android',
+          workers: 2,
+          use: { platform: Platform.ANDROID, device: { provider: 'emulator' } },
+        },
+      ],
+    });
+    assert.throws(() => defineConfig(cfg), /project "android"/);
+  });
+
+  test('top-level workers: 3 but project.workers: 1 → that project exempt', () => {
+    const cfg = mkConfig({
+      workers: 3,
+      projects: [
+        {
+          name: 'android',
+          workers: 1,
+          use: { platform: Platform.ANDROID, device: { provider: 'emulator' } },
+        },
+      ],
+    });
+    assert.equal(findParallelMisconfig(cfg), null);
+  });
+});
+
+describe('resolveCliWorkers', () => {
+  const cfg = {
+    workers: 1,
+    projects: [
+      {
+        name: 'a',
+        workers: 2,
+        use: { platform: Platform.ANDROID, device: { provider: 'emulator', pool: POOL2 } },
+      },
+      {
+        name: 'b',
+        workers: 3,
+        use: {
+          platform: Platform.IOS,
+          device: { provider: 'browserstack', name: 'iPhone 15', osVersion: '17' },
+        },
+      },
+    ],
+  };
+
+  test('single --project → that project workers', () => {
+    assert.equal(resolveCliWorkers(cfg, ['a']), 2);
+    assert.equal(resolveCliWorkers(cfg, ['b']), 3);
+  });
+
+  test('no filter + single-project config → its workers', () => {
+    const one = {
+      projects: [
+        {
+          name: 'only',
+          workers: 4,
+          use: { platform: Platform.ANDROID, device: { provider: 'emulator' } },
+        },
+      ],
+    };
+    assert.equal(resolveCliWorkers(one, []), 4);
+  });
+
+  test('ambiguous (no filter, multiple projects) → undefined', () => {
+    assert.equal(resolveCliWorkers(cfg, []), undefined);
+  });
+
+  test('multiple --project values → undefined', () => {
+    assert.equal(resolveCliWorkers(cfg, ['a', 'b']), undefined);
+  });
+
+  test('unknown --project name → undefined', () => {
+    assert.equal(resolveCliWorkers(cfg, ['nope']), undefined);
+  });
+
+  test('explicit user --workers wins (string parsed)', () => {
+    assert.equal(resolveCliWorkers(cfg, ['a'], '5'), 5);
+    assert.equal(resolveCliWorkers(cfg, [], '8'), 8);
+  });
+
+  test('unparseable user --workers → undefined', () => {
+    assert.equal(resolveCliWorkers(cfg, ['a'], 'abc'), undefined);
+  });
+
+  test('project falling back to top-level workers', () => {
+    const fb = {
+      workers: 2,
+      projects: [
+        {
+          name: 'a',
+          use: { platform: Platform.ANDROID, device: { provider: 'emulator', pool: POOL2 } },
+        },
+      ],
+    };
+    assert.equal(resolveCliWorkers(fb, ['a']), 2);
   });
 });
 
