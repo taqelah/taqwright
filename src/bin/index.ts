@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { Command } from 'commander';
 import { findConfigFile, loadTaqwrightConfig, resolveCliWorkers } from '../config.js';
 import { maybeAutoStartAppium } from '../auto-appium.js';
@@ -10,6 +10,7 @@ import { listDevices, type Device } from '../inspector/devices.js';
 import { runSetup } from '../setup/index.js';
 import { applyManagedEnv } from '../setup/paths.js';
 import { BrandingBuffer } from './branding.js';
+import { brandReportDir } from './report-branding.js';
 
 const _require = createRequire(import.meta.url);
 
@@ -171,6 +172,15 @@ program
     const code = await runPlaywright(args);
     for (const proc of appiumProcs) {
       if (!proc.killed) proc.kill();
+    }
+    // Re-brand the fresh HTML report (the run regenerates index.html, wiping
+    // any prior injection). Best-effort: never let branding fail the run. Only
+    // the default folder is known here; custom folders get branded at
+    // `show-report` time via the explicit path.
+    try {
+      brandReportDir(resolve(process.cwd(), 'playwright-report'));
+    } catch {
+      // ignore — report may be absent (non-html reporter) or unreadable
     }
     process.exit(code);
   });
@@ -401,6 +411,13 @@ program
     const args = ['show-report'];
     if (report) args.push(report);
     args.push('--host', opts.host, '--port', opts.port);
+    // Brand the report (title + taqwright favicon) before Playwright's static
+    // server serves it. Honors an explicit report path; best-effort.
+    try {
+      brandReportDir(resolve(process.cwd(), report ?? 'playwright-report'));
+    } catch {
+      // ignore — report dir may not exist; Playwright will report that itself
+    }
     process.exit(await runPlaywright(args));
   });
 
