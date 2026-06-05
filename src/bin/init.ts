@@ -262,24 +262,20 @@ export async function runInit(argDir: string | undefined, opts: InitOptions = {}
       '  npx taqwright install --with-avd   # add an Android emulator (~1 GB), or use a physical device',
     );
   }
-  console.log('  npx taqwright doctor          # check your environment');
-  console.log('  npx taqwright devices         # list connected devices');
-  if (demoAppReady) {
+  console.log('\nCommands:');
+  console.log('  npx taqwright init');
+  console.log('  npx taqwright doctor');
+  console.log('  npx taqwright codegen');
+  console.log('  npx taqwright test');
+  console.log('  npx taqwright show-report');
+  if (!demoAppReady && platforms.includes('android')) {
     console.log(
-      '  npx taqwright test            # runs the demo login test (Appium auto-starts)\n',
+      '\nNo demo app was added — the example test is a no-op stub. Drop an APK in\n' +
+        'app/ and set buildPath/appBundleId in taqwright.config.ts, or re-run\n' +
+        '`npx taqwright init --demo-app` to fetch the demo app.',
     );
-  } else {
-    console.log('  npx taqwright test            # run the example test (Appium auto-starts)');
-    if (platforms.includes('android')) {
-      console.log(
-        '\nNo demo app was added — the example test is a no-op stub. Drop an APK in\n' +
-          'app/ and set buildPath/appBundleId in taqwright.config.ts, or re-run\n' +
-          '`npx taqwright init --demo-app` to fetch the demo app.\n',
-      );
-    } else {
-      console.log('');
-    }
   }
+  console.log('');
 }
 
 // ─── prompt helpers ───────────────────────────────────────────────────
