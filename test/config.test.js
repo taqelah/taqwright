@@ -11,6 +11,7 @@ import {
   defineConfig,
   findParallelMisconfig,
   findAutoStartDeviceMisconfig,
+  findAutoDiscoverMisconfig,
   TAQWRIGHT_KEY,
 } from '../dist/config.js';
 import { buildCapabilities } from '../dist/capabilities.js';
@@ -334,6 +335,132 @@ describe('defineConfig — autoStartDevice validation', () => {
     assert.equal(findParallelMisconfig(cfg), null);
     assert.equal(findAutoStartDeviceMisconfig(cfg), null);
     assert.doesNotThrow(() => defineConfig(cfg));
+  });
+});
+
+describe('defineConfig — autoDiscover validation', () => {
+  const adProj = (name, device, platform = Platform.ANDROID) => ({
+    name,
+    use: { platform, device },
+  });
+
+  test('android emulator + autoDiscover alone → ok', () => {
+    const cfg = mkConfig({
+      workers: 2,
+      projects: [adProj('android', { provider: 'emulator', autoDiscover: true })],
+    });
+    assert.equal(findAutoDiscoverMisconfig(cfg), null);
+    assert.doesNotThrow(() => defineConfig(cfg));
+  });
+
+  test('exempts the project from findParallelMisconfig (no pool needed)', () => {
+    const cfg = mkConfig({
+      workers: 3,
+      projects: [adProj('android', { provider: 'emulator', autoDiscover: true })],
+    });
+    assert.equal(findParallelMisconfig(cfg), null);
+  });
+
+  test('exempts from findAutoStartDeviceMisconfig (AVD names resolved at runtime)', () => {
+    const cfg = mkConfig({
+      projects: [
+        {
+          name: 'android',
+          use: {
+            platform: Platform.ANDROID,
+            device: { provider: 'emulator', autoDiscover: true },
+            appium: { autoStartDevice: true },
+          },
+        },
+      ],
+    });
+    assert.equal(findAutoStartDeviceMisconfig(cfg), null);
+  });
+
+  test('autoDiscover + pool → throws (mutually exclusive)', () => {
+    const cfg = mkConfig({
+      projects: [
+        adProj('android', {
+          provider: 'emulator',
+          autoDiscover: true,
+          pool: [{ udid: 'emulator-5554' }],
+        }),
+      ],
+    });
+    assert.throws(() => defineConfig(cfg), /mutually exclusive with `device\.pool`/);
+  });
+
+  test('autoDiscover + udid → throws (mutually exclusive)', () => {
+    const cfg = mkConfig({
+      projects: [adProj('android', { provider: 'emulator', autoDiscover: true, udid: 'x' })],
+    });
+    assert.throws(() => defineConfig(cfg), /mutually exclusive with `device\.udid`/);
+  });
+
+  test('autoDiscover on a cloud provider → throws', () => {
+    const cfg = mkConfig({
+      projects: [
+        adProj('bs', {
+          provider: 'browserstack',
+          name: 'Pixel 7',
+          osVersion: '13.0',
+          autoDiscover: true,
+        }),
+      ],
+    });
+    assert.throws(() => defineConfig(cfg), /Auto-discovery is for local/);
+  });
+
+  test('autoDiscover on local-device + iOS → throws (v1 unsupported)', () => {
+    const cfg = mkConfig({
+      projects: [adProj('iphone', { provider: 'local-device', autoDiscover: true }, Platform.IOS)],
+    });
+    assert.throws(() => defineConfig(cfg), /not yet.*supported for local-device \+ iOS/s);
+  });
+
+  test('autoDiscover + emulator + autoStartDevice:false → throws', () => {
+    const cfg = mkConfig({
+      projects: [
+        {
+          name: 'android',
+          use: {
+            platform: Platform.ANDROID,
+            device: { provider: 'emulator', autoDiscover: true },
+            appium: { autoStartDevice: false },
+          },
+        },
+      ],
+    });
+    assert.throws(() => defineConfig(cfg), /needs `appium\.autoStartDevice`/);
+  });
+
+  test('no autoDiscover anywhere → ok (regression) and no globalSetup injected', () => {
+    assert.equal(findAutoDiscoverMisconfig(mkConfig()), null);
+    const pw = defineConfig(mkConfig());
+    assert.equal(pw.globalSetup, undefined);
+  });
+
+  test('injects the internal globalSetup when a project opts in', () => {
+    const pw = defineConfig(
+      mkConfig({
+        workers: 2,
+        projects: [adProj('android', { provider: 'emulator', autoDiscover: true })],
+      }),
+    );
+    assert.ok(Array.isArray(pw.globalSetup));
+    assert.match(pw.globalSetup[0], /discovery-setup\.js$/);
+  });
+
+  test('prepends the internal globalSetup before the user-supplied one', () => {
+    const pw = defineConfig(
+      mkConfig({
+        workers: 2,
+        globalSetup: './my-setup.js',
+        projects: [adProj('android', { provider: 'emulator', autoDiscover: true })],
+      }),
+    );
+    assert.match(pw.globalSetup[0], /discovery-setup\.js$/);
+    assert.equal(pw.globalSetup[1], './my-setup.js');
   });
 });
 

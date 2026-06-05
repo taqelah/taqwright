@@ -535,6 +535,13 @@ ${deviceNameLine}
           //   { udid: 'emulator-5556', name: 'Pixel_7_API_34_2' },
           //   { udid: 'emulator-5558', name: 'Pixel_7_API_34_3' },
           // ],
+          //
+          // Or skip the pool entirely and let taqwright discover local
+          // devices and partition them across \`workers\` for you — it
+          // cold-boots shutdown AVDs/simulators to reach the count and
+          // fails fast if too few are available. Mutually exclusive with
+          // \`pool\` / \`udid\`.
+          // autoDiscover: true,
         },
         // Spawn \`npx appium\` automatically when nothing is listening on
         // the configured host:port. Set \`autoStart: false\` to manage
