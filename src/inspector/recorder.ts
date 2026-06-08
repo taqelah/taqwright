@@ -1,4 +1,21 @@
+import type { LocatorDescriptor } from '../types/index.js';
+
 export type SwipeDirection = 'up' | 'down' | 'left' | 'right';
+
+/**
+ * Structured locator carried on every element-targeted action. `code` is the
+ * taqwright TS snippet used by `renderAction`; `using`/`value`/`descriptor`
+ * are the WebDriver-level locator, needed to re-render the action against the
+ * raw Appium clients (Python/Java). They're optional so older recordings (and
+ * tests) that only set `code` still type-check; the Appium renderers fall back
+ * to a TODO comment when the structured form is absent.
+ */
+export interface RecordedLocator {
+  code: string;
+  using?: string;
+  value?: string;
+  descriptor?: LocatorDescriptor;
+}
 
 export type RecordedAction =
   // Coordinate-targeted screen actions
@@ -13,38 +30,38 @@ export type RecordedAction =
       toY?: number;
     }
   // Element-targeted actions (rendered via the locator)
-  | { kind: 'locatorClick'; code: string }
-  | { kind: 'locatorDoubleTap'; code: string }
-  | { kind: 'locatorLongPress'; code: string }
-  | { kind: 'locatorFill'; code: string; text: string }
-  | { kind: 'locatorClear'; code: string }
-  | { kind: 'assertVisible'; code: string }
-  | { kind: 'assertHidden'; code: string }
-  | { kind: 'assertEnabled'; code: string }
-  | { kind: 'assertDisabled'; code: string }
-  | { kind: 'assertText'; code: string; expected: string; mode: 'exact' | 'contains' }
-  | { kind: 'assertValue'; code: string; expected: string }
-  | { kind: 'locatorSwipe'; code: string; direction: SwipeDirection }
-  | { kind: 'locatorScrollIntoView'; code: string }
-  | { kind: 'locatorPinch'; code: string; direction: 'in' | 'out' }
-  | { kind: 'locatorDragTo'; code: string; targetCode: string }
-  | { kind: 'locatorCheck'; code: string }
-  | { kind: 'locatorUncheck'; code: string }
-  | { kind: 'locatorFocus'; code: string }
-  | { kind: 'locatorBlur'; code: string }
-  | { kind: 'locatorPress'; code: string; key: string }
-  | { kind: 'locatorPressSequentially'; code: string; text: string; delay?: number }
-  | { kind: 'locatorSelectOption'; code: string; value: SelectOptionInput | string }
-  | { kind: 'assertChecked'; code: string }
-  | { kind: 'assertUnchecked'; code: string }
-  | { kind: 'assertEditable'; code: string }
-  | { kind: 'assertReadonly'; code: string }
-  | { kind: 'assertFocused'; code: string }
-  | { kind: 'assertAttached'; code: string }
-  | { kind: 'assertEmpty'; code: string }
-  | { kind: 'assertInViewport'; code: string }
-  | { kind: 'assertCount'; code: string; expected: number }
-  | { kind: 'assertAttribute'; code: string; name: string; expected: string }
+  | ({ kind: 'locatorClick' } & RecordedLocator)
+  | ({ kind: 'locatorDoubleTap' } & RecordedLocator)
+  | ({ kind: 'locatorLongPress' } & RecordedLocator)
+  | ({ kind: 'locatorFill'; text: string } & RecordedLocator)
+  | ({ kind: 'locatorClear' } & RecordedLocator)
+  | ({ kind: 'assertVisible' } & RecordedLocator)
+  | ({ kind: 'assertHidden' } & RecordedLocator)
+  | ({ kind: 'assertEnabled' } & RecordedLocator)
+  | ({ kind: 'assertDisabled' } & RecordedLocator)
+  | ({ kind: 'assertText'; expected: string; mode: 'exact' | 'contains' } & RecordedLocator)
+  | ({ kind: 'assertValue'; expected: string } & RecordedLocator)
+  | ({ kind: 'locatorSwipe'; direction: SwipeDirection } & RecordedLocator)
+  | ({ kind: 'locatorScrollIntoView' } & RecordedLocator)
+  | ({ kind: 'locatorPinch'; direction: 'in' | 'out' } & RecordedLocator)
+  | ({ kind: 'locatorDragTo'; targetCode: string; target?: RecordedLocator } & RecordedLocator)
+  | ({ kind: 'locatorCheck' } & RecordedLocator)
+  | ({ kind: 'locatorUncheck' } & RecordedLocator)
+  | ({ kind: 'locatorFocus' } & RecordedLocator)
+  | ({ kind: 'locatorBlur' } & RecordedLocator)
+  | ({ kind: 'locatorPress'; key: string } & RecordedLocator)
+  | ({ kind: 'locatorPressSequentially'; text: string; delay?: number } & RecordedLocator)
+  | ({ kind: 'locatorSelectOption'; value: SelectOptionInput | string } & RecordedLocator)
+  | ({ kind: 'assertChecked' } & RecordedLocator)
+  | ({ kind: 'assertUnchecked' } & RecordedLocator)
+  | ({ kind: 'assertEditable' } & RecordedLocator)
+  | ({ kind: 'assertReadonly' } & RecordedLocator)
+  | ({ kind: 'assertFocused' } & RecordedLocator)
+  | ({ kind: 'assertAttached' } & RecordedLocator)
+  | ({ kind: 'assertEmpty' } & RecordedLocator)
+  | ({ kind: 'assertInViewport' } & RecordedLocator)
+  | ({ kind: 'assertCount'; expected: number } & RecordedLocator)
+  | ({ kind: 'assertAttribute'; name: string; expected: string } & RecordedLocator)
   | { kind: 'sendKeys'; text: string }
   | { kind: 'switchContext'; context: string }
   | { kind: 'comment'; text: string };

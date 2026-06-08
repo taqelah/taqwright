@@ -357,6 +357,20 @@ export class InspectorSession {
       process.env.LAMBDATEST_ACCESS_KEY = cloud.key;
     }
     const platform = cloud.platform === 'ios' ? Platform.IOS : Platform.ANDROID;
+    // Codegen is interactive: unlike `taqwright test`, don't auto-accept
+    // permission / system alerts (location, gallery, …) so the user can see and
+    // record the grant step. Override the providers' true-defaults via
+    // use.capabilities (merged last by both providers), using each provider's
+    // own key naming. An explicit user value still wins.
+    const userCloudCaps = cloud.capabilities ?? {};
+    const permKeys =
+      cloud.provider === 'browserstack'
+        ? ['appium:autoGrantPermissions', 'appium:autoAcceptAlerts']
+        : ['autoGrantPermissions', 'autoAcceptAlerts'];
+    const codegenPermOff: Record<string, unknown> = {};
+    for (const k of permKeys) {
+      if (!(k in userCloudCaps)) codegenPermOff[k] = false;
+    }
     const use = {
       platform,
       device: {
@@ -367,7 +381,7 @@ export class InspectorSession {
       },
       buildPath: cloud.appUrl,
       appBundleId: cloud.appBundleId,
-      capabilities: cloud.capabilities ?? {},
+      capabilities: { ...codegenPermOff, ...userCloudCaps },
     } as TaqwrightUseOptions;
     const provider = createDeviceProvider(use, cloud.projectName ?? 'inspector');
     if (provider.globalSetup) await provider.globalSetup();
@@ -375,7 +389,8 @@ export class InspectorSession {
     this.activeProvider = provider;
     this.driver = handle.driver;
     this.platform = platform;
-    this.lastCapabilities = use.capabilities ?? {};
+    // Store only the user's caps; don't leak the codegen-only override.
+    this.lastCapabilities = userCloudCaps;
     this.currentContext = 'NATIVE_APP';
   }
 
