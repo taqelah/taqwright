@@ -15,8 +15,8 @@ function npm(args: string[], cwd: string, env: NodeJS.ProcessEnv): Promise<void>
 }
 
 /**
- * Provision Appium 3 + the uiautomator2 driver sudo-free into the managed
- * dir (no global npm). Reuses {@link installDriver} (previously dead code)
+ * Provision Appium 3 + the uiautomator2 driver (and xcuitest on macOS)
+ * sudo-free into the managed dir (no global npm). Reuses {@link installDriver}
  * pointed at the managed `appium` binary with the vendored SDK/JDK on env.
  * Returns the `node_modules/.bin` dir (added to the managed PATH).
  */
@@ -31,6 +31,7 @@ export async function installAppium(
   const appiumBin = path.join(binDir, process.platform === 'win32' ? 'appium.cmd' : 'appium');
   // Appium installs drivers under $APPIUM_HOME/node_modules.
   const uia2Dir = path.join(appiumHome, 'node_modules', 'appium-uiautomator2-driver');
+  const xcuiDir = path.join(appiumHome, 'node_modules', 'appium-xcuitest-driver');
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     ANDROID_HOME: androidHome,
@@ -63,6 +64,19 @@ export async function installAppium(
     await installDriver('uiautomator2', { appiumPath: appiumBin, env });
   } else {
     console.log('  • uiautomator2 driver already present — skipping');
+  }
+  // XCUITest only builds/runs on macOS (its postinstall assumes a Mac + Xcode),
+  // so the iOS driver is provisioned there only — on Linux/Windows iOS isn't a
+  // target anyway. Same idempotent skip/reinstall as uiautomator2 above.
+  if (process.platform === 'darwin') {
+    if (force || !existsSync(xcuiDir)) {
+      console.log('  • installing the xcuitest driver…');
+      await installDriver('xcuitest', { appiumPath: appiumBin, env });
+    } else {
+      console.log('  • xcuitest driver already present — skipping');
+    }
+  } else {
+    console.log('  • xcuitest driver — skipped (iOS needs macOS)');
   }
   return binDir;
 }
