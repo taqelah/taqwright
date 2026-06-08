@@ -35,7 +35,9 @@ export async function runSetup(opts: SetupOptions = {}): Promise<void> {
   const androidHome = await installAndroidSdk(force, javaHome);
   console.log(`  ✓ ANDROID_HOME=${androidHome}\n`);
 
-  console.log('3/4  Appium 3 + uiautomator2 driver');
+  console.log(
+    `3/4  Appium 3 + uiautomator2 driver${process.platform === 'darwin' ? ' (+ xcuitest)' : ''}`,
+  );
   const appiumBin = await installAppium(force, androidHome, javaHome);
   console.log(`  ✓ appium at ${appiumBin}\n`);
 
@@ -68,7 +70,12 @@ export async function runSetup(opts: SetupOptions = {}): Promise<void> {
     '\nAndroid is ready — `npx taqwright test` uses this toolchain automatically ' +
       '(no shell exports needed).',
   );
-  console.log('Still manual (cannot be auto-installed): Node ≥ 24 and the iOS/Xcode stack.');
+  console.log(
+    process.platform === 'darwin'
+      ? 'The xcuitest driver is installed too; for iOS you still need Xcode + a booted ' +
+          'simulator (cannot be auto-installed), plus Node ≥ 24.'
+      : 'Still manual (cannot be auto-installed): Node ≥ 24 and the iOS/Xcode stack.',
+  );
   if (opts.printEnv) {
     console.log('\nTo also use this toolchain from your own shell, add:');
     console.log(`  export JAVA_HOME="${javaHome}"`);
