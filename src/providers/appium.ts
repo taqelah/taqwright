@@ -33,14 +33,36 @@ export async function installDriver(
     p.on('error', () => resolve());
   });
   await new Promise<void>((resolve, reject) => {
-    const p = spawnTool(cmd, [...prefix, 'driver', 'install', driverName], { stdio: 'pipe', env });
+    const p = spawnTool(cmd, [...prefix, 'driver', 'install', driverName], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env,
+    });
+    // Capture the child's output so a non-zero exit surfaces Appium's real
+    // error (npm/network fetch failure, unsupported Node, proxy block, …)
+    // instead of an opaque `exited 1`.
+    let out = '';
+    const cap = (d: Buffer): void => {
+      out += d.toString();
+    };
+    p.stdout?.on('data', cap);
+    p.stderr?.on('data', cap);
     p.on('exit', (code) =>
       code === 0
         ? resolve()
-        : reject(new Error(`appium driver install ${driverName} exited ${code}`)),
+        : reject(
+            new Error(
+              `appium driver install ${driverName} exited ${code}` +
+                (out.trim() ? `\n${lastLines(out, 30)}` : ''),
+            ),
+          ),
     );
     p.on('error', reject);
   });
+}
+
+/** Keep only the last `n` lines of `s` — trims multi-hundred-line npm logs. */
+function lastLines(s: string, n: number): string {
+  return s.trimEnd().split('\n').slice(-n).join('\n');
 }
 
 export interface AppiumServerSpawnOptions {
