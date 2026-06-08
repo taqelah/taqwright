@@ -40,7 +40,7 @@ export const INSPECTOR_HTML = `<!doctype html>
   /* ─── Header ─────────────────────────────────────────────── */
   header { display: flex; align-items: center; gap: 10px; padding: 8px 16px;
     background: var(--panel); border-bottom: 1px solid var(--border); height: 52px; }
-  header .logo { height: 32px; width: 32px; object-fit: cover; border-radius: 6px;
+  header .logo { height: 32px; width: auto; object-fit: contain; border-radius: 6px;
     flex-shrink: 0; }
   header h1 { font-size: 14px; font-weight: 600; margin: 0; letter-spacing: -0.01em;
     color: var(--text); }
@@ -59,7 +59,7 @@ export const INSPECTOR_HTML = `<!doctype html>
   @media (max-width: 720px) { header .header-ad-text { display: none; } }
   button.icon { background: var(--panel-2); border: 1px solid var(--border);
     color: var(--text-dim); padding: 6px 10px; border-radius: 6px; font: inherit;
-    cursor: pointer; transition: background 0.1s, color 0.1s; }
+    cursor: pointer; white-space: nowrap; transition: background 0.1s, color 0.1s; }
   button.icon:hover { background: var(--border); color: var(--text); }
   button.icon.active { background: var(--accent); color: #fff; border-color: var(--accent); }
   button.icon.danger { background: var(--danger); color: #fff; border-color: var(--danger); }
@@ -98,7 +98,7 @@ export const INSPECTOR_HTML = `<!doctype html>
     border-radius: 1px; transition: background 0.25s; min-width: 24px;
     max-width: 80px; }
   .wizard-line.done { background: var(--success); }
-  .wizard-content { flex: 1; min-height: 0; overflow: auto; padding: 0 2px; }
+  .wizard-content { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 0 2px; }
   .wizard-page { display: none; }
   .wizard-page.active { display: block; animation: wizardIn 0.22s ease-out; }
   @keyframes wizardIn {
@@ -243,6 +243,8 @@ export const INSPECTOR_HTML = `<!doctype html>
   .device-tile .actions .icon.use:hover { background: var(--accent-hover);
     border-color: var(--accent-hover); }
   .device-empty { padding: 12px 0; color: var(--text-muted); font-size: 12px; font-style: italic; }
+  .device-empty .rec-sel-spinner { width: 13px; height: 13px; border-width: 1.5px;
+    vertical-align: -2px; margin-right: 6px; font-style: normal; }
   .device-warn { padding: 8px 10px; margin-bottom: 10px; font-size: 12px;
     background: #fff8c5; border: 1px solid rgba(154,103,0,0.35);
     color: var(--warn); border-radius: 5px; font-family: var(--mono); }
@@ -261,17 +263,22 @@ export const INSPECTOR_HTML = `<!doctype html>
   .doctor-summary .twisty { color: var(--text-muted); margin-left: auto; font-size: 10px; }
   .doctor-summary .pill { padding: 1px 7px; font-size: 10px; }
   .doctor-list { list-style: none; margin: 8px 0 0; padding: 0; display: none; }
-  .doctor-list.expanded { display: block; }
-  .doctor-list li { display: flex; align-items: center; gap: 8px;
-    padding: 3px 8px; font-size: 12px; }
+  .doctor-list.expanded { display: block;
+    max-height: clamp(140px, calc(100vh - 430px), 360px); overflow-y: auto; }
+  .doctor-list li { display: block; padding: 3px 8px; font-size: 12px; }
+  .doctor-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
   .doctor-list .ico { width: 14px; flex-shrink: 0; text-align: center; font-weight: 700;
     font-family: var(--mono); font-size: 11px; }
   .doctor-list .ico.ok { color: var(--success); }
   .doctor-list .ico.warn { color: var(--warn); }
   .doctor-list .ico.error { color: var(--danger); }
-  .doctor-list .name { color: var(--text); }
+  .doctor-list .name { color: var(--text); min-width: 0; overflow-wrap: anywhere; }
   .doctor-list .detail { color: var(--text-dim); font-family: var(--mono);
-    font-size: 11px; margin-left: auto; }
+    font-size: 11px; margin-left: auto; text-align: right;
+    min-width: 0; overflow-wrap: anywhere; }
+  .doctor-list .detail-block { margin: 2px 0 4px 22px; color: var(--text-dim);
+    font-family: var(--mono); font-size: 11px; line-height: 1.45;
+    overflow-wrap: anywhere; word-break: break-word; }
   /* Inputs */
   .field { display: grid; grid-template-columns: 90px 1fr; align-items: center;
     gap: 8px; margin-bottom: 6px; }
@@ -287,7 +294,7 @@ export const INSPECTOR_HTML = `<!doctype html>
   .field-tri label { font-size: 12px; color: var(--text-dim); }
   .field-tri input { background: #fff; color: var(--text);
     border: 1px solid var(--border); padding: 5px 9px; border-radius: 5px;
-    font: 13px var(--mono); outline: none; }
+    font: 13px var(--mono); outline: none; min-width: 0; width: 100%; }
   .field-tri input:focus { border-color: var(--accent);
     box-shadow: 0 0 0 3px rgba(9,105,218,0.15); }
   .checkbox { display: flex; align-items: center; gap: 6px; padding: 4px 0;
@@ -310,22 +317,11 @@ export const INSPECTOR_HTML = `<!doctype html>
   .pill.live .led { background: var(--success); box-shadow: 0 0 6px rgba(26,127,55,0.5); }
   .pill.down { color: var(--warn); border-color: rgba(154,103,0,0.35); background: #fff8c5; }
   .pill.down .led { background: var(--warn); }
-  /* ─── Live toggle (Screen pane head) ──────────────────────── */
-  .btn-auto-refresh { display: inline-flex; align-items: center; gap: 0;
-    margin-left: 8px; }
-  .btn-auto-refresh .live-dot { width: 7px; height: 7px; border-radius: 50%;
-    background: var(--text-muted); display: inline-block; margin-right: 6px;
-    flex-shrink: 0; transition: background 0.15s; }
-  .btn-auto-refresh.active { color: var(--success);
-    border-color: rgba(26,127,55,0.35); background: #dafbe1; }
-  .btn-auto-refresh.active:hover { background: #b1f0c0; color: var(--success); }
-  .btn-auto-refresh.active .live-dot { background: var(--success);
-    box-shadow: 0 0 6px rgba(26,127,55,0.5);
-    animation: live-pulse 1.4s ease-in-out infinite; }
-  @keyframes live-pulse {
-    0%, 100% { transform: scale(1); opacity: 1; }
-    50%      { transform: scale(0.7); opacity: 0.55; }
-  }
+  .pill.booting { color: var(--warn); border-color: rgba(154,103,0,0.35); background: #fff8c5; }
+  .pill.booting .led { width: 9px; height: 9px; background: transparent; box-shadow: none;
+    border: 1.5px solid rgba(154,103,0,0.3); border-top-color: var(--warn);
+    border-radius: 50%; animation: loader-spin 0.7s linear infinite; }
+  .appium-hint { font-size: 11px; color: var(--text-dim); line-height: 1.45; margin-top: 6px; }
   /* Capabilities */
   .caps-fields { flex: 1; min-height: 0; overflow: auto; padding-right: 4px; }
   .extras-head { display: flex; align-items: center; gap: 8px;
@@ -413,6 +409,7 @@ export const INSPECTOR_HTML = `<!doctype html>
     border: 1px solid var(--border); padding: 5px 9px; border-radius: 5px;
     font: inherit; outline: none; }
   .tree-search:focus { border-color: var(--accent); }
+  .hier-xml-body mark.xml-match { background: #fff3b0; color: inherit; border-radius: 2px; }
   .tree-body { padding: 6px 6px 12px; }
   ul.tree, ul.tree ul { list-style: none; padding-left: 14px; margin: 0; }
   ul.tree { padding-left: 4px; }
@@ -441,6 +438,17 @@ export const INSPECTOR_HTML = `<!doctype html>
   #highlight { position: absolute; border: 2px solid var(--accent);
     background: rgba(9,105,218,0.12); box-shadow: 0 0 0 9999px rgba(0,0,0,0.40) inset;
     pointer-events: none; transition: all 0.12s ease-out; }
+  .screen-action-overlay { position: absolute; inset: 0; display: none; z-index: 5;
+    align-items: center; justify-content: center; background: rgba(0,0,0,0.32); }
+  .screen-action-overlay.shown { display: flex; }
+  .screen-action-card { display: flex; align-items: center; gap: 10px;
+    background: var(--panel); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 14px; font-size: 12.5px; font-weight: 600;
+    box-shadow: 0 6px 22px rgba(0,0,0,0.25); }
+  .screen-action-check { display: none; color: var(--success); font-size: 16px; font-weight: 700; }
+  .screen-action-overlay.done .rec-sel-spinner { display: none; }
+  .screen-action-overlay.done .screen-action-check { display: inline; }
+  .screen-action-overlay.done .screen-action-card { color: var(--success); }
   /* ─── Right pane (tabs) ──────────────────────────────────── */
   .tabs { display: flex; background: var(--panel); border-bottom: 1px solid var(--border);
     flex-shrink: 0; }
@@ -586,10 +594,17 @@ export const INSPECTOR_HTML = `<!doctype html>
     display: block; width: 100%; }
   .rec-no-unique { color: var(--warn); font-size: 12px; line-height: 1.45;
     margin-bottom: 8px; }
+  .rec-sel-spinner { display: inline-block; width: 16px; height: 16px;
+    border: 2px solid var(--border); border-top-color: var(--accent);
+    border-radius: 50%; animation: loader-spin 0.7s linear infinite; }
+  .rec-resolving-hint { display: block; margin-top: 4px; font-size: 11px;
+    color: var(--text-muted); line-height: 1.4; }
+  .empty-state .rec-sel-spinner { width: 13px; height: 13px; border-width: 1.5px;
+    vertical-align: -2px; margin-right: 6px; }
 
   /* Action groups */
   .rec-group { margin-bottom: 18px; }
-  .rec-group-title { display: flex; align-items: center; gap: 8px;
+  .rec-group-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
     font-size: 11px; font-weight: 700; text-transform: uppercase;
     letter-spacing: 0.08em; color: var(--text-dim); margin-bottom: 9px; }
   .rec-group-title .grow { flex: 1; }
@@ -679,11 +694,15 @@ export const INSPECTOR_HTML = `<!doctype html>
   .rec-pickhint button { margin-left: auto; }
 
   /* Recorded script */
+  .lang-seg { display: inline-flex; gap: 2px; margin-right: 6px; }
+  .lang-seg button { padding: 3px 8px; font-size: 11px; }
+  .lang-seg button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .rec-lang-note { font-size: 11px; color: var(--text-dim); margin: 2px 2px 8px; }
   .rec-script-card { background: var(--code-bg); border: 1px solid var(--border);
     border-radius: 8px; padding: 0; overflow: hidden; }
   .rec-script-card pre { background: transparent; padding: 12px 14px;
     font-family: var(--mono); font-size: 12.5px; line-height: 1.6;
-    white-space: pre-wrap; word-break: break-all; color: var(--text);
+    white-space: pre-wrap; word-break: normal; overflow-wrap: anywhere; color: var(--text);
     margin: 0; max-height: 320px; overflow: auto; }
   .rec-script-card pre:empty::before { content: "// no actions yet — start recording and interact with the device";
     color: var(--text-muted); font-style: italic; }
@@ -910,6 +929,7 @@ export const INSPECTOR_HTML = `<!doctype html>
               <button class="icon" id="btn-appium-restart">Restart Appium</button>
               <button class="icon" id="btn-appium-start">Start Appium</button>
             </div>
+            <div id="appium-start-hint" class="appium-hint" style="display:none">First start can take up to a minute while the UiAutomator2 / XCUITest drivers load.</div>
           </div>
         </div>
       </div>
@@ -1076,7 +1096,7 @@ export const INSPECTOR_HTML = `<!doctype html>
         <button class="hier-mode-btn" data-hier-mode="tree" type="button" role="tab">Tree</button>
       </div>
       <span class="loc-spacer"></span>
-      <input class="tree-search" id="tree-search" placeholder="filter by tag, id, text…" style="display:none" />
+      <input class="tree-search" id="tree-search" placeholder="filter by tag, id, text…" />
     </div>
     <div class="pane-body tree-body" id="hier-tree-body" style="display:none">
       <ul class="tree" id="tree"></ul>
@@ -1094,15 +1114,18 @@ export const INSPECTOR_HTML = `<!doctype html>
               title="Automation context — switch into a WebView to inspect the web DOM"></select>
       <span class="context-hint hidden" id="context-hint" role="button" tabindex="0"
             title="No WebView context detected — click for help">ⓘ No WebView</span>
-      <button class="icon btn-auto-refresh active" id="btn-auto-refresh" type="button"
-              title="Auto-refresh the screen every 1.5 s">
-        <span class="live-dot"></span><span>Live</span>
-      </button>
     </div>
     <div class="pane-body" id="screen-wrap">
       <div id="screen-host">
         <img id="screen-img" alt="device screen" />
         <div id="highlight" style="display:none"></div>
+        <div id="screen-action-overlay" class="screen-action-overlay" aria-hidden="true">
+          <div class="screen-action-card">
+            <span class="rec-sel-spinner"></span>
+            <span class="screen-action-check">✓</span>
+            <span id="screen-action-label">Performing action…</span>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -1305,10 +1328,16 @@ export const INSPECTOR_HTML = `<!doctype html>
         <div class="rec-group-title">
           Recorded script
           <span class="grow"></span>
+          <span class="lang-seg" id="script-lang">
+            <button class="icon active" data-lang="ts" type="button">Taqwright</button>
+            <button class="icon" data-lang="python" type="button">Python</button>
+            <button class="icon" data-lang="java" type="button">Java</button>
+          </span>
           <button class="icon" id="btn-copy-script" type="button">⎘ Copy</button>
-          <button class="icon" id="btn-export-script" type="button" title="Save the recorded spec into your project's tests folder">↓ Export</button>
+          <button class="icon" id="btn-export-script" type="button" title="Save the recorded script into your project's tests folder">↓ Export</button>
           <button class="icon" id="btn-clear-script" type="button">Clear</button>
         </div>
+        <div class="rec-lang-note" id="script-lang-note" style="display:none">Steps only — paste into your own Appium test (driver/setup not included).</div>
         <div class="rec-script-card">
           <pre id="script"></pre>
         </div>
@@ -1474,12 +1503,11 @@ export const INSPECTOR_HTML = `<!doctype html>
   }
 
   // ─── Auto-refresh ────────────────────────────────────────────────
-  // Polls /api/snapshot every AUTO_REFRESH_MS so the inspector mirrors
-  // the device live. The Live toggle in the Screen pane head pauses it.
+  // Polls /api/snapshot so the inspector mirrors the device live. Always on
+  // while connected (no toggle); auto-paused during snapshots, anchor-picks,
+  // and locator resolves.
   const AUTO_REFRESH_MS = 1500;
-  // WebView snapshots are heavier (chromedriver source / native screenshot of an
-  // animating page), so self-throttle Live to a larger floor there.
-  const WEB_REFRESH_MS = 4000;
+  const WEB_REFRESH_MS = 4000; // WebView snapshots are heavier — larger floor
   let autoRefreshOn = true;
   let autoRefreshTimer = null;
   let snapshotInFlight = false;
@@ -1488,33 +1516,28 @@ export const INSPECTOR_HTML = `<!doctype html>
     if (autoRefreshTimer) clearTimeout(autoRefreshTimer);
     autoRefreshTimer = setTimeout(autoRefreshTick, delay);
   }
-
   function startAutoRefresh() {
     if (autoRefreshTimer) return;
     autoRefreshOn = true;
     scheduleNextRefresh(0);
-    const btn = document.getElementById('btn-auto-refresh');
-    if (btn) btn.classList.add('active');
-    // Session is live — populate the context selector (Native + any WebViews).
-    refreshContexts();
+    refreshContexts(); // populate Native + any WebView contexts on connect
   }
-
   function stopAutoRefresh() {
     autoRefreshOn = false;
     if (autoRefreshTimer) clearTimeout(autoRefreshTimer);
     autoRefreshTimer = null;
-    const btn = document.getElementById('btn-auto-refresh');
-    if (btn) btn.classList.remove('active');
-    // Session ended — reset the context selector back to its hidden default.
+    // Reset the context selector back to its hidden default on disconnect.
     state.context = 'NATIVE_APP';
     const sel = document.getElementById('context-select');
-    if (sel) { sel.classList.add('hidden'); sel.classList.remove('web'); }
+    if (sel) {
+      sel.classList.add('hidden');
+      sel.classList.remove('web');
+    }
   }
-
   async function autoRefreshTick() {
     autoRefreshTimer = null;
     if (!autoRefreshOn) return;
-    // Busy (snapshot/verify/anchor-pick in progress) — re-check soon, don't fetch now.
+    // Busy (snapshot/verify/anchor-pick in progress) — re-check soon.
     if (snapshotInFlight || anchorPickHandler !== null || locatorState === 'resolving') {
       scheduleNextRefresh(AUTO_REFRESH_MS);
       return;
@@ -1522,8 +1545,8 @@ export const INSPECTOR_HTML = `<!doctype html>
     const started = performance.now();
     await fetchSnapshot();
     const elapsed = performance.now() - started;
-    // Gap at least as long as the snapshot took (with a webview floor) so Live
-    // never piles onto a slow device.
+    // Gap at least as long as the snapshot took (with a webview floor) so we
+    // never pile onto a slow device.
     const base = isWebContext() ? WEB_REFRESH_MS : AUTO_REFRESH_MS;
     if (autoRefreshOn) scheduleNextRefresh(Math.max(base, elapsed));
   }
@@ -1531,23 +1554,26 @@ export const INSPECTOR_HTML = `<!doctype html>
   async function fetchSnapshot(opts) {
     const force = opts && opts.force;
     if (snapshotInFlight) {
-      if (!force) return;                 // Live tick: skip when busy
+      if (!force) return;                 // Non-forced refresh: skip if a snapshot is already running
       // Forced (context switch): wait for the in-flight snapshot to finish,
       // then run ours so the tree re-renders for the new context.
       while (snapshotInFlight) await new Promise((r) => setTimeout(r, 50));
     }
     snapshotInFlight = true;
     setStatus('snapshot…', true);
-    // Capture the previously-selected element's xpath + identity fingerprint
-    // so we can re-bind selection across the new tree only if it's truly the
-    // SAME element. Without this, after a navigation an unrelated element
-    // sitting at the same positional xpath would be picked up and highlighted.
-    const prevXpath = state.selected?.__xpath;
-    const prevSig = elementSignature(state.selected);
     try {
       const r = await fetch('/api/snapshot');
       if (!r.ok) throw new Error('HTTP ' + r.status);
       const j = await r.json();
+      // Capture the selected element's xpath + identity fingerprint AFTER the
+      // fetch resolves, so a selection the user made while the snapshot was in
+      // flight (e.g. tapping a new element right after an action) is the one we
+      // re-bind across the new tree — not the stale selection from when the
+      // snapshot started. Reading these off the now-detached node is safe;
+      // renderTree builds fresh nodes. The xpath+signature match below still
+      // drops an unrelated element sitting at the same xpath after a navigation.
+      const prevXpath = state.selected?.__xpath;
+      const prevSig = elementSignature(state.selected);
       state.platform = j.platform;
       state.project = j.project;
       state.viewport = j.viewport;
@@ -1679,7 +1705,10 @@ export const INSPECTOR_HTML = `<!doctype html>
   }
 
   // ─── Tree filter ─────────────────────────────────────────────────
-  $('tree-search').addEventListener('input', (ev) => applyTreeFilter(ev.target.value));
+  $('tree-search').addEventListener('input', (ev) => {
+    if (hierarchyMode === 'xml') applyXmlFilter(ev.target.value);
+    else applyTreeFilter(ev.target.value);
+  });
   function applyTreeFilter(q) {
     q = (q || '').trim().toLowerCase();
     const items = $('tree').querySelectorAll('li.node');
@@ -1999,7 +2028,7 @@ export const INSPECTOR_HTML = `<!doctype html>
     setStatus('verifying locators…', true);
     markLocatorResolving();
     $('tab-locators').innerHTML =
-      '<div class="empty-state">Verifying locator uniqueness…</div>';
+      '<div class="empty-state"><span class="rec-sel-spinner"></span>Verifying locator uniqueness…</div>';
     const attrs = {};
     for (const a of Array.from(el.attributes)) attrs[a.name] = a.value;
     attrs['__tag'] = (el.tagName || '').toLowerCase();
@@ -2288,16 +2317,16 @@ export const INSPECTOR_HTML = `<!doctype html>
     });
     const treeBody = document.getElementById('hier-tree-body');
     const xmlBody = document.getElementById('hier-xml-body');
-    const search = document.getElementById('tree-search');
+    // The filter field stays visible in both modes; re-apply it for the mode
+    // we're switching into so highlights stay correct.
     if (mode === 'xml') {
       treeBody.style.display = 'none';
       xmlBody.style.display = '';
-      if (search) search.style.display = 'none';
       refreshHierarchyXml();
     } else {
       treeBody.style.display = '';
       xmlBody.style.display = 'none';
-      if (search) search.style.display = '';
+      applyTreeFilter($('tree-search').value);
     }
   }
   document.querySelectorAll('.hier-mode-btn').forEach((b) => {
@@ -2411,9 +2440,35 @@ export const INSPECTOR_HTML = `<!doctype html>
   }
 
   function refreshHierarchyXml() {
-    const xml = state.sourceXml || '';
+    applyXmlFilter($('tree-search').value);
+  }
+  // Highlight (not hide) substring matches in the XML view — parity with the
+  // tree filter. Empty query renders the plain source.
+  function applyXmlFilter(q) {
     const pre = document.getElementById('hier-xml-pre');
-    if (pre) pre.textContent = xml;
+    if (!pre) return;
+    const xml = state.sourceXml || '';
+    q = (q || '').trim();
+    if (!q) {
+      pre.textContent = xml;
+      return;
+    }
+    const lx = xml.toLowerCase();
+    const lq = q.toLowerCase();
+    let html = '';
+    let idx = 0;
+    let pos = lx.indexOf(lq);
+    while (pos !== -1) {
+      html +=
+        escapeHtml(xml.slice(idx, pos)) +
+        '<mark class="xml-match">' +
+        escapeHtml(xml.slice(pos, pos + q.length)) +
+        '</mark>';
+      idx = pos + q.length;
+      pos = lx.indexOf(lq, idx);
+    }
+    html += escapeHtml(xml.slice(idx));
+    pre.innerHTML = html;
   }
 
   // ─── Record tab wiring ──────────────────────────────────────────
@@ -2467,14 +2522,23 @@ export const INSPECTOR_HTML = `<!doctype html>
       const tag = shortTag(state.selected.tagName);
       const ident = pickIdent(state.selected);
       titleEl.textContent = ident ? tag + ' · ' + ident : tag;
-      iconEl.textContent = hasUnique ? '✓' : (locatorState === 'resolving' ? '…' : '⚠');
+      if (hasUnique) {
+        iconEl.textContent = '✓';
+      } else if (locatorState === 'resolving') {
+        iconEl.innerHTML = '<span class="rec-sel-spinner"></span>';
+      } else {
+        iconEl.textContent = '⚠';
+      }
       if (hasUnique) {
         card.classList.add('has');
         subEl.textContent = bestLocatorForSelected.code;
       } else {
         card.classList.remove('has');
         if (locatorState === 'resolving') {
-          subEl.textContent = 'Resolving locator…';
+          subEl.innerHTML = 'Resolving locator…' +
+            (isCloudMode()
+              ? '<span class="rec-resolving-hint">Verifying candidates against the cloud device — this can take a few seconds.</span>'
+              : '');
         } else {
           // No unique locator: render an inline Build-relative-xpath button
           // here so the user doesn't have to leave the Record tab.
@@ -2535,10 +2599,50 @@ export const INSPECTOR_HTML = `<!doctype html>
     }
   }
 
+  // ─── Action progress overlay (over the device screenshot) ───────
+  // Bridges the gap between clicking an action and the screen updating: a veil
+  // with a per-action label while the device works, then a brief success ✓.
+  let actionInFlight = false;
+  function actionLabel(kind) {
+    const m = { click: 'Tapping…', doubleTap: 'Double-tapping…', longPress: 'Long-pressing…',
+      fill: 'Typing…', clear: 'Clearing…', swipe: 'Swiping…', scrollIntoView: 'Scrolling…',
+      pinch: 'Pinching…', check: 'Checking…', uncheck: 'Unchecking…', focus: 'Focusing…',
+      blur: 'Blurring…', press: 'Pressing key…', pressSequentially: 'Typing…',
+      selectOption: 'Selecting…', dragTo: 'Dragging…', scroll: 'Scrolling…' };
+    return m[kind] || 'Performing action…';
+  }
+  function beginAction(label) {
+    if (actionInFlight) return false;          // ignore re-entrant clicks
+    actionInFlight = true;
+    const el = $('screen-action-overlay');
+    el.classList.remove('done');
+    $('screen-action-label').textContent = label;
+    el.classList.add('shown');
+    el.setAttribute('aria-hidden', 'false');
+    setStatus('action…', true);
+    return true;
+  }
+  function endActionSuccess() {
+    const el = $('screen-action-overlay');
+    el.classList.add('done');
+    $('screen-action-label').textContent = 'Done';
+    setTimeout(() => { el.classList.remove('shown'); el.setAttribute('aria-hidden', 'true'); }, 700);
+    setStatus('done');
+    actionInFlight = false;
+  }
+  function endActionError(msg) {
+    const el = $('screen-action-overlay');
+    el.classList.remove('shown');
+    el.setAttribute('aria-hidden', 'true');
+    setStatus('action error: ' + msg);
+    showToast(msg, 'error', { title: 'Action failed' });
+    actionInFlight = false;
+  }
+
   async function postLocatorAction(extra) {
     if (!bestLocatorForSelected) return;
+    if (!beginAction(actionLabel(extra.kind))) return;
     const s = bestLocatorForSelected;
-    setStatus('action…', true);
     try {
       const r = await fetch('/api/locator-action', {
         method: 'POST', headers: { 'content-type': 'application/json' },
@@ -2548,14 +2652,15 @@ export const INSPECTOR_HTML = `<!doctype html>
       });
       if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || ('HTTP ' + r.status)); }
       await refreshScript();
-      setTimeout(fetchSnapshot, 300);
-      setStatus('done');
+      await new Promise((res) => setTimeout(res, 300));   // let the device settle
+      await fetchSnapshot({ force: true });
+      endActionSuccess();
     } catch (err) {
-      setStatus('action error: ' + err.message);
+      endActionError(err.message);
     }
   }
   async function postScreenAction(body) {
-    setStatus('action…', true);
+    if (!beginAction(actionLabel(body.kind))) return;
     try {
       const r = await fetch('/api/screen-action', {
         method: 'POST', headers: { 'content-type': 'application/json' },
@@ -2563,10 +2668,11 @@ export const INSPECTOR_HTML = `<!doctype html>
       });
       if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.error || ('HTTP ' + r.status)); }
       await refreshScript();
-      setTimeout(fetchSnapshot, 300);
-      setStatus('done');
+      await new Promise((res) => setTimeout(res, 300));   // let the device settle
+      await fetchSnapshot({ force: true });
+      endActionSuccess();
     } catch (err) {
-      setStatus('action error: ' + err.message);
+      endActionError(err.message);
     }
   }
 
@@ -2963,15 +3069,35 @@ export const INSPECTOR_HTML = `<!doctype html>
 
   /** Cache the most-recent unstyled spec so Copy doesn't paste highlighted HTML. */
   let lastSpec = '';
+  // Target language for the Recorded-script tab: 'ts' (default, taqwright) |
+  // 'python' (Appium-Python-Client) | 'java' (Appium java-client).
+  let scriptLang = 'ts';
+  function defaultScriptName() {
+    return scriptLang === 'python'
+      ? 'recorded_steps.py'
+      : scriptLang === 'java'
+        ? 'RecordedSteps.java'
+        : 'recorded.spec.ts';
+  }
   async function refreshScript() {
-    const r = await fetch('/api/recording');
+    const r = await fetch('/api/recording?lang=' + scriptLang);
     const j = await r.json();
     lastSpec = j.spec || '';
-    $('script').innerHTML = lastSpec ? highlightJs(lastSpec) : '';
+    $('script').innerHTML = lastSpec ? highlightCode(lastSpec, scriptLang) : '';
     if (typeof j.recording === 'boolean' && j.recording !== recording) {
       applyRecordingState(j.recording);
     }
   }
+  document.querySelectorAll('#script-lang button').forEach((b) => {
+    b.onclick = async () => {
+      scriptLang = b.dataset.lang;
+      document
+        .querySelectorAll('#script-lang button')
+        .forEach((x) => x.classList.toggle('active', x === b));
+      $('script-lang-note').style.display = scriptLang === 'ts' ? 'none' : '';
+      await refreshScript();
+    };
+  });
   $('btn-copy-script').onclick = async () => {
     try {
       await refreshScript();
@@ -3029,7 +3155,7 @@ export const INSPECTOR_HTML = `<!doctype html>
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
-            defaultName: 'recorded.spec.ts',
+            defaultName: defaultScriptName(),
             defaultLocation: info.absoluteDir,
           }),
         });
@@ -3063,7 +3189,7 @@ export const INSPECTOR_HTML = `<!doctype html>
       // Fallback: plain prompt for filename within testDir (non-macOS).
       const filename = window.prompt(
         'Save as (relative to ' + info.absoluteDir + '):',
-        'recorded.spec.ts',
+        defaultScriptName(),
       );
       if (!filename) return;
       let r = await fetch('/api/export-script', {
@@ -3123,19 +3249,35 @@ export const INSPECTOR_HTML = `<!doctype html>
    * tokenizer (more robust than regex passes which choke when keywords
    * appear inside strings) producing colored <span> tags.
    */
-  function highlightJs(src) {
-    const KW = new Set([
+  // Language-agnostic tokenizer shared by the Taqwright (TS), Python and Java
+  // views. Strings / numbers / identifiers / function-calls / punctuation are
+  // common; only line-comment syntax and the keyword set vary by language.
+  const KW_BY_LANG = {
+    ts: new Set([
       'import', 'from', 'export', 'async', 'await', 'return',
       'if', 'else', 'const', 'let', 'var', 'new',
       'true', 'false', 'null', 'undefined',
-    ]);
+    ]),
+    python: new Set([
+      'import', 'from', 'as', 'def', 'class', 'return',
+      'if', 'elif', 'else', 'for', 'while', 'in', 'is', 'and', 'or', 'not',
+      'lambda', 'assert', 'with', 'try', 'except', 'None', 'True', 'False',
+    ]),
+    java: new Set([
+      'import', 'package', 'public', 'private', 'protected', 'static', 'final',
+      'void', 'var', 'new', 'return', 'if', 'else', 'for', 'while', 'class',
+      'this', 'throws', 'throw', 'try', 'catch', 'true', 'false', 'null', 'assert',
+    ]),
+  };
+  function highlightCode(src, lang) {
+    const KW = KW_BY_LANG[lang] || KW_BY_LANG.ts;
     const out = [];
     const n = src.length;
     let i = 0;
     while (i < n) {
       const c = src[i];
-      // Comment // ... newline
-      if (c === '/' && src[i + 1] === '/') {
+      // Line comment: // (TS/Java) or # (Python) ... newline
+      if ((c === '/' && src[i + 1] === '/') || (c === '#' && lang === 'python')) {
         const end = src.indexOf('\\n', i);
         const stop = end === -1 ? n : end;
         out.push(span('cmt', src.slice(i, stop)));
@@ -3262,7 +3404,6 @@ export const INSPECTOR_HTML = `<!doctype html>
           'Reconnecting to the active session and pulling the latest snapshot.');
         showView('inspector');
         await fetchSnapshot();
-        autoRefreshOn = true;
         startAutoRefresh();
         hideLoader();
       } else {
@@ -3499,6 +3640,10 @@ export const INSPECTOR_HTML = `<!doctype html>
     $('cap-device').value = '';
     $('cap-version').value = '';
     $('cap-udid').value = '';
+    // Drop the previous source's catalog so step 2 doesn't flash stale tiles
+    // before the new source's loadDevices() resolves.
+    lastDeviceData = { android: [], ios: [], toolsMissing: {} };
+    devicePage = { android: 0, ios: 0 };
     updateConnectSummary();
   }
 
@@ -3628,9 +3773,9 @@ export const INSPECTOR_HTML = `<!doctype html>
     $('btn-step-next').style.display = n < 3 ? '' : 'none';
     $('btn-connect').style.display = n === 3 ? '' : 'none';
     updateConnectSummary();
-    // Lazy-load cloud catalog the first time the user enters step 2 in
-    // cloud mode (creds aren't known until step 1 completes).
-    if (n === 2 && isCloudMode()) loadDevices();
+    // Reload the catalog whenever step 2 is entered so the list always
+    // reflects the currently selected source (loadDevices branches on mode).
+    if (n === 2) loadDevices();
   }
 
   function maybeHidePrereqProgress() {
@@ -3913,10 +4058,18 @@ export const INSPECTOR_HTML = `<!doctype html>
       }
       $('doctor-list').innerHTML = checks.map((c) => {
         const sym = c.status === 'ok' ? '✓' : c.status === 'warn' ? '!' : '✗';
+        // OK rows show their short value inline-right; warn/error details (often
+        // long paths/commands) drop to a full-width wrapping line below the name.
+        const inline = c.status === 'ok' && c.detail
+          ? '<span class="detail">' + escapeHtml(c.detail) + '</span>' : '';
+        const block = c.status !== 'ok' && c.detail
+          ? '<div class="detail-block">' + escapeHtml(c.detail) + '</div>' : '';
         return '<li>' +
-          '<span class="ico ' + c.status + '">' + sym + '</span>' +
-          '<span class="name">' + escapeHtml(c.name) + '</span>' +
-          (c.detail ? '<span class="detail">' + escapeHtml(c.detail) + '</span>' : '') +
+          '<div class="doctor-row">' +
+            '<span class="ico ' + c.status + '">' + sym + '</span>' +
+            '<span class="name">' + escapeHtml(c.name) + '</span>' +
+            inline +
+          '</div>' + block +
           '</li>';
       }).join('');
       // Auto-expand if anything failed.
@@ -3950,6 +4103,14 @@ export const INSPECTOR_HTML = `<!doctype html>
   async function loadDevices() {
     const refreshBtn = $('btn-devices-refresh');
     refreshBtn.disabled = true;
+    // Show a loading placeholder synchronously so switching device source (or a
+    // slow cloud fetch) never flashes the previously rendered device list.
+    $('devices-warn').innerHTML = '';
+    $('device-pagination').innerHTML = '';
+    $('device-count-android').textContent = '…';
+    $('device-count-ios').textContent = '…';
+    $('device-grid').innerHTML =
+      '<div class="device-empty"><span class="rec-sel-spinner"></span>Loading devices…</div>';
     try {
       if (isCloudMode()) {
         const u = ($('cloud-user').value || '').trim();
@@ -3995,6 +4156,7 @@ export const INSPECTOR_HTML = `<!doctype html>
         renderDevices();
       }
     } catch (err) {
+      $('device-grid').innerHTML = '';
       $('devices-warn').innerHTML =
         '<div class="device-warn">Failed to load devices: ' + escapeHtml(err.message) + '</div>';
     } finally {
@@ -4287,6 +4449,31 @@ export const INSPECTOR_HTML = `<!doctype html>
     renderDevices();
   }
 
+  // While a (blocking) start/restart request is in flight, show a spinner pill
+  // with a live elapsed-seconds counter so a slow boot doesn't look frozen.
+  let appiumStartTimer = null;
+  function setAppiumStarting(label) {
+    $('appium-pill').className = 'pill booting';
+    $('appium-pill-label').textContent = label + '… 0s';
+    $('appium-start-hint').style.display = '';
+    $('btn-appium-recheck').disabled = true;
+    $('btn-appium-restart').disabled = true;
+    $('btn-appium-start').disabled = true;
+    let secs = 0;
+    if (appiumStartTimer) clearInterval(appiumStartTimer);
+    appiumStartTimer = setInterval(() => {
+      secs += 1;
+      $('appium-pill-label').textContent = label + '… ' + secs + 's';
+    }, 1000);
+  }
+  function clearAppiumStarting() {
+    if (appiumStartTimer) { clearInterval(appiumStartTimer); appiumStartTimer = null; }
+    $('appium-start-hint').style.display = 'none';
+    $('btn-appium-recheck').disabled = false;
+    $('btn-appium-restart').disabled = false;
+    // btn-appium-start re-enable is decided by refreshAppiumPill (reachable?)
+  }
+
   async function refreshAppiumPill() {
     const opts = readAppiumForm();
     const pill = $('appium-pill');
@@ -4341,8 +4528,8 @@ export const INSPECTOR_HTML = `<!doctype html>
 
   async function startAppium() {
     const opts = readAppiumForm();
-    $('btn-appium-start').disabled = true;
     $('btn-appium-start').textContent = 'Starting…';
+    setAppiumStarting('starting Appium');
     try {
       const r = await fetch('/api/appium/start', {
         method: 'POST', headers: { 'content-type': 'application/json' },
@@ -4350,20 +4537,24 @@ export const INSPECTOR_HTML = `<!doctype html>
       });
       const j = await r.json();
       if (!r.ok || !j.ok) throw new Error(j.error || ('HTTP ' + r.status));
+      clearAppiumStarting();
       await refreshAppiumPill();
       showToast('Appium server is running on ' + opts.host + ':' + opts.port, 'success', { title: 'Appium started' });
     } catch (e) {
-      showToast(e.message, 'error', { title: 'Failed to start Appium' });
+      clearAppiumStarting();
+      $('appium-pill').className = 'pill down';
+      $('appium-pill-label').textContent = 'not reachable on ' + opts.host + ':' + opts.port;
       $('btn-appium-start').disabled = false;
       $('btn-appium-start').textContent = 'Start Appium';
+      showToast(e.message, 'error', { title: 'Failed to start Appium' });
     }
   }
 
   async function restartAppium() {
     const opts = readAppiumForm();
     const btn = $('btn-appium-restart');
-    btn.disabled = true;
     btn.textContent = 'Restarting…';
+    setAppiumStarting('restarting Appium');
     try {
       const r = await fetch('/api/appium/restart', {
         method: 'POST', headers: { 'content-type': 'application/json' },
@@ -4371,13 +4562,16 @@ export const INSPECTOR_HTML = `<!doctype html>
       });
       const j = await r.json();
       if (!r.ok || !j.ok) throw new Error(j.error || ('HTTP ' + r.status));
+      clearAppiumStarting();
       await refreshAppiumPill();
       showToast('Appium restarted on ' + opts.host + ':' + opts.port, 'success',
         { title: 'Appium restarted' });
     } catch (e) {
+      clearAppiumStarting();
+      $('appium-pill').className = 'pill down';
+      $('appium-pill-label').textContent = 'not reachable on ' + opts.host + ':' + opts.port;
       showToast(e.message, 'error', { title: 'Failed to restart Appium' });
     } finally {
-      btn.disabled = false;
       btn.textContent = 'Restart Appium';
     }
   }
@@ -4434,7 +4628,6 @@ export const INSPECTOR_HTML = `<!doctype html>
         'Capturing the screenshot and UI hierarchy from the device.');
       showView('inspector');
       await fetchSnapshot();
-      autoRefreshOn = true;
       startAutoRefresh();
       hideLoader();
     } catch (e) {
@@ -4467,18 +4660,6 @@ export const INSPECTOR_HTML = `<!doctype html>
     state.nodeMap.clear();
     showView('setup');
     await bootstrap();
-  };
-
-  // Live toggle in the Screen pane head — pause/resume auto-refresh.
-  $('btn-auto-refresh').onclick = () => {
-    autoRefreshOn = !autoRefreshOn;
-    if (autoRefreshOn) {
-      startAutoRefresh();
-      showToast('Live refresh on — screen updates every 1.5 s.', 'success', { title: 'Live' });
-    } else {
-      stopAutoRefresh();
-      showToast('Live refresh paused. Click Live to resume, or press R to refresh once.', 'info', { title: 'Paused' });
-    }
   };
 
   bootstrap();

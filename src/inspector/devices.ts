@@ -180,6 +180,16 @@ async function onlineAdbDevices(): Promise<Map<string, OnlineDevice>> {
   await Promise.all(
     serials.map(async (serial) => {
       const info: OnlineDevice = {};
+      // Liveness gate. adb keeps a just-closed emulator in state `device` for a
+      // beat after its process dies (the transport teardown lags), so the row
+      // above passes the `device` filter while the device is actually gone.
+      // Such a zombie answers no shell command — its avd_name never resolves —
+      // so `listAndroid` can't tie it to an AVD and the unclaimed-online
+      // fallback surfaces it as a phantom bare-serial device ("emulator-5554").
+      // This getprop is the cheapest round-trip to adbd: a live device
+      // (emulator or physical, even mid-boot) answers it the instant adb reports
+      // `device`; a dead transport throws. So treat a throw as "not online" and
+      // drop the serial.
       try {
         const { stdout: name } = await execFileP('adb', [
           '-s',
@@ -191,7 +201,7 @@ async function onlineAdbDevices(): Promise<Map<string, OnlineDevice>> {
         const trimmed = name.trim();
         if (trimmed) info.avdName = trimmed;
       } catch {
-        /* ignore */
+        return;
       }
       if (!info.avdName) {
         try {

@@ -11,7 +11,8 @@ import {
   type LocatorStrategy,
 } from '../types/index.js';
 import { Locator, buildLocatorFromDescriptor, type LocatorContext } from '../locator/index.js';
-import type { SwipeDirection } from './recorder.js';
+import type { SwipeDirection, RecordedLocator } from './recorder.js';
+import { toStepsPython, toStepsJava } from './codegen-appium.js';
 import { runDoctorChecks } from '../doctor.js';
 import { isPortOpen } from '../auto-appium.js';
 import {
@@ -543,8 +544,18 @@ async function handle(
     return;
   }
 
-  if (method === 'GET' && url === '/api/recording') {
-    json(res, 200, { spec: session.recorder.toSpec(), recording: session.recording });
+  if (method === 'GET' && (url === '/api/recording' || url.startsWith('/api/recording?'))) {
+    // ?lang=ts (default) | python | java — TS keeps the full runnable spec;
+    // python/java are steps-only Appium-client translations.
+    const lang = new URL(url, 'http://x').searchParams.get('lang') ?? 'ts';
+    const actions = session.recorder.list();
+    const spec =
+      lang === 'python'
+        ? toStepsPython(actions)
+        : lang === 'java'
+          ? toStepsJava(actions)
+          : session.recorder.toSpec();
+    json(res, 200, { spec, recording: session.recording });
     return;
   }
 
@@ -730,6 +741,15 @@ export function resolveLocatorDescriptor(body: LocatorTarget): LocatorDescriptor
   throw new Error('locator-action: body is missing both `descriptor` and `{using, value}`');
 }
 
+/**
+ * Snapshot the structured locator off an action body so the recorder can later
+ * re-render it against the raw Appium clients (Python/Java), not just the
+ * taqwright TS `code` string. Param is named `b` (not `body`) on purpose.
+ */
+function recordedLoc(b: LocatorTarget): RecordedLocator {
+  return { code: b.code, using: b.using, value: b.value, descriptor: b.descriptor };
+}
+
 async function runLocatorAction(
   driver: ConnectedDriver,
   platform: Platform,
@@ -745,23 +765,23 @@ async function runLocatorAction(
   switch (body.kind) {
     case 'click':
       await locator.click();
-      session.recordIf({ kind: 'locatorClick', code: body.code });
+      session.recordIf({ kind: 'locatorClick', ...recordedLoc(body) });
       return;
     case 'doubleTap':
       await locator.doubleTap();
-      session.recordIf({ kind: 'locatorDoubleTap', code: body.code });
+      session.recordIf({ kind: 'locatorDoubleTap', ...recordedLoc(body) });
       return;
     case 'longPress':
       await locator.longPress();
-      session.recordIf({ kind: 'locatorLongPress', code: body.code });
+      session.recordIf({ kind: 'locatorLongPress', ...recordedLoc(body) });
       return;
     case 'fill':
       await locator.fill(body.text);
-      session.recordIf({ kind: 'locatorFill', code: body.code, text: body.text });
+      session.recordIf({ kind: 'locatorFill', ...recordedLoc(body), text: body.text });
       return;
     case 'clear':
       await locator.clear();
-      session.recordIf({ kind: 'locatorClear', code: body.code });
+      session.recordIf({ kind: 'locatorClear', ...recordedLoc(body) });
       return;
     case 'assertion':
       return runAssertion(locator, session, body);
@@ -780,52 +800,53 @@ async function runLocatorAction(
           await locator.swipeDown();
           break;
       }
-      session.recordIf({ kind: 'locatorSwipe', code: body.code, direction: body.direction });
+      session.recordIf({ kind: 'locatorSwipe', ...recordedLoc(body), direction: body.direction });
       return;
     case 'scrollIntoView':
       await locator.scrollIntoView();
-      session.recordIf({ kind: 'locatorScrollIntoView', code: body.code });
+      session.recordIf({ kind: 'locatorScrollIntoView', ...recordedLoc(body) });
       return;
     case 'pinch':
       if (body.direction === 'in') await locator.pinchIn();
       else await locator.pinchOut();
-      session.recordIf({ kind: 'locatorPinch', code: body.code, direction: body.direction });
+      session.recordIf({ kind: 'locatorPinch', ...recordedLoc(body), direction: body.direction });
       return;
     case 'dragTo': {
       const targetLoc = buildLocatorFromDescriptor(ctx, resolveLocatorDescriptor(body.target));
       await locator.dragTo(targetLoc);
       session.recordIf({
         kind: 'locatorDragTo',
-        code: body.code,
+        ...recordedLoc(body),
         targetCode: body.target.code,
+        target: recordedLoc(body.target),
       });
       return;
     }
     case 'check':
       await locator.check();
-      session.recordIf({ kind: 'locatorCheck', code: body.code });
+      session.recordIf({ kind: 'locatorCheck', ...recordedLoc(body) });
       return;
     case 'uncheck':
       await locator.uncheck();
-      session.recordIf({ kind: 'locatorUncheck', code: body.code });
+      session.recordIf({ kind: 'locatorUncheck', ...recordedLoc(body) });
       return;
     case 'focus':
       await locator.focus();
-      session.recordIf({ kind: 'locatorFocus', code: body.code });
+      session.recordIf({ kind: 'locatorFocus', ...recordedLoc(body) });
       return;
     case 'blur':
       await locator.blur();
-      session.recordIf({ kind: 'locatorBlur', code: body.code });
+      session.recordIf({ kind: 'locatorBlur', ...recordedLoc(body) });
       return;
     case 'press':
       await locator.press(body.key);
-      session.recordIf({ kind: 'locatorPress', code: body.code, key: body.key });
+      session.recordIf({ kind: 'locatorPress', ...recordedLoc(body), key: body.key });
       return;
     case 'pressSequentially':
       await locator.pressSequentially(body.text, { delay: body.delay });
       session.recordIf({
         kind: 'locatorPressSequentially',
-        code: body.code,
+        ...recordedLoc(body),
         text: body.text,
         ...(body.delay !== undefined ? { delay: body.delay } : {}),
       });
@@ -834,7 +855,7 @@ async function runLocatorAction(
       await locator.selectOption(body.value);
       session.recordIf({
         kind: 'locatorSelectOption',
-        code: body.code,
+        ...recordedLoc(body),
         value: body.value,
       });
       return;
@@ -959,21 +980,21 @@ async function runAssertion(
   if (verified || body.force) {
     switch (matcher) {
       case 'visible':
-        session.recordIf({ kind: 'assertVisible', code: body.code });
+        session.recordIf({ kind: 'assertVisible', ...recordedLoc(body) });
         break;
       case 'hidden':
-        session.recordIf({ kind: 'assertHidden', code: body.code });
+        session.recordIf({ kind: 'assertHidden', ...recordedLoc(body) });
         break;
       case 'enabled':
-        session.recordIf({ kind: 'assertEnabled', code: body.code });
+        session.recordIf({ kind: 'assertEnabled', ...recordedLoc(body) });
         break;
       case 'disabled':
-        session.recordIf({ kind: 'assertDisabled', code: body.code });
+        session.recordIf({ kind: 'assertDisabled', ...recordedLoc(body) });
         break;
       case 'text':
         session.recordIf({
           kind: 'assertText',
-          code: body.code,
+          ...recordedLoc(body),
           expected: body.expected ?? '',
           mode: body.mode === 'contains' ? 'contains' : 'exact',
         });
@@ -981,45 +1002,45 @@ async function runAssertion(
       case 'value':
         session.recordIf({
           kind: 'assertValue',
-          code: body.code,
+          ...recordedLoc(body),
           expected: body.expected ?? '',
         });
         break;
       case 'checked':
-        session.recordIf({ kind: 'assertChecked', code: body.code });
+        session.recordIf({ kind: 'assertChecked', ...recordedLoc(body) });
         break;
       case 'unchecked':
-        session.recordIf({ kind: 'assertUnchecked', code: body.code });
+        session.recordIf({ kind: 'assertUnchecked', ...recordedLoc(body) });
         break;
       case 'editable':
-        session.recordIf({ kind: 'assertEditable', code: body.code });
+        session.recordIf({ kind: 'assertEditable', ...recordedLoc(body) });
         break;
       case 'readonly':
-        session.recordIf({ kind: 'assertReadonly', code: body.code });
+        session.recordIf({ kind: 'assertReadonly', ...recordedLoc(body) });
         break;
       case 'focused':
-        session.recordIf({ kind: 'assertFocused', code: body.code });
+        session.recordIf({ kind: 'assertFocused', ...recordedLoc(body) });
         break;
       case 'attached':
-        session.recordIf({ kind: 'assertAttached', code: body.code });
+        session.recordIf({ kind: 'assertAttached', ...recordedLoc(body) });
         break;
       case 'empty':
-        session.recordIf({ kind: 'assertEmpty', code: body.code });
+        session.recordIf({ kind: 'assertEmpty', ...recordedLoc(body) });
         break;
       case 'inViewport':
-        session.recordIf({ kind: 'assertInViewport', code: body.code });
+        session.recordIf({ kind: 'assertInViewport', ...recordedLoc(body) });
         break;
       case 'count':
         session.recordIf({
           kind: 'assertCount',
-          code: body.code,
+          ...recordedLoc(body),
           expected: body.expectedCount ?? 0,
         });
         break;
       case 'attribute':
         session.recordIf({
           kind: 'assertAttribute',
-          code: body.code,
+          ...recordedLoc(body),
           name: body.attrName ?? '',
           expected: body.expected ?? '',
         });
@@ -1355,8 +1376,8 @@ async function exportScriptToProject(
   if (body.absolutePath) {
     const ap = String(body.absolutePath).trim();
     if (!path.isAbsolute(ap)) throw new Error('absolutePath must be absolute.');
-    if (!/\.(t|j)sx?$/i.test(ap)) {
-      throw new Error('Path must end in .ts / .tsx / .js / .jsx (commonly .spec.ts).');
+    if (!/\.(tsx?|jsx?|py|java)$/i.test(ap)) {
+      throw new Error('Path must end in .ts / .tsx / .js / .jsx / .py / .java.');
     }
     absPath = ap;
   } else {
@@ -1371,8 +1392,8 @@ async function exportScriptToProject(
     if (filename.includes('/') || filename.includes('\\') || filename.startsWith('.')) {
       throw new Error('filename must be a plain file name (no slashes, no leading dot).');
     }
-    if (!/\.(t|j)sx?$/i.test(filename)) {
-      throw new Error('filename must end in .ts / .tsx / .js / .jsx (commonly .spec.ts).');
+    if (!/\.(tsx?|jsx?|py|java)$/i.test(filename)) {
+      throw new Error('filename must end in .ts / .tsx / .js / .jsx / .py / .java.');
     }
     const absDir = path.resolve(projectRoot, testDir);
     absPath = path.join(absDir, filename);
