@@ -736,6 +736,11 @@ export const INSPECTOR_HTML = `<!doctype html>
     margin-top: 4px; }
   .loader-sub { color: var(--text-dim); font-size: 12.5px;
     max-width: 380px; text-align: center; line-height: 1.45; }
+  #loader-cancel { display: none; margin-top: 6px; background: var(--panel-2);
+    color: var(--text); border: 1px solid var(--border); border-radius: 6px;
+    padding: 7px 16px; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+  #loader-cancel:hover { background: var(--border); }
+  #loader-cancel.shown { display: inline-block; }
   /* ─── Toast notifications ────────────────────────────────── */
   #toasts { position: fixed; top: 60px; right: 16px; z-index: 1000;
     display: flex; flex-direction: column; gap: 8px;
@@ -1092,16 +1097,16 @@ export const INSPECTOR_HTML = `<!doctype html>
     <div class="pane-head">
       <span class="pane-title">Hierarchy</span>
       <div class="hier-mode-toggle" role="tablist" aria-label="hierarchy view">
-        <button class="hier-mode-btn active" data-hier-mode="xml" type="button" role="tab">XML</button>
-        <button class="hier-mode-btn" data-hier-mode="tree" type="button" role="tab">Tree</button>
+        <button class="hier-mode-btn active" data-hier-mode="tree" type="button" role="tab">Tree</button>
+        <button class="hier-mode-btn" data-hier-mode="xml" type="button" role="tab">XML</button>
       </div>
       <span class="loc-spacer"></span>
       <input class="tree-search" id="tree-search" placeholder="filter by tag, id, text…" />
     </div>
-    <div class="pane-body tree-body" id="hier-tree-body" style="display:none">
+    <div class="pane-body tree-body" id="hier-tree-body">
       <ul class="tree" id="tree"></ul>
     </div>
-    <div class="pane-body hier-xml-body" id="hier-xml-body">
+    <div class="pane-body hier-xml-body" id="hier-xml-body" style="display:none">
       <pre id="hier-xml-pre"></pre>
     </div>
   </div>
@@ -1177,6 +1182,9 @@ export const INSPECTOR_HTML = `<!doctype html>
       <div class="rec-pane" id="rec-pane-actions">
         <button class="rec-act primary" data-act="click" disabled style="width:100%">
           <span class="ico">▶</span><span>Click</span>
+        </button>
+        <button class="rec-act" data-screen="tap-point" style="width:100%;margin-top:7px">
+          <span class="ico">⊙</span><span>Click @ coordinates</span>
         </button>
         <div class="rec-grid cols-2" style="margin-top:7px">
           <button class="rec-act" data-act="doubleTap" disabled><span class="ico">⏯</span><span>Double tap</span></button>
@@ -1280,8 +1288,7 @@ export const INSPECTOR_HTML = `<!doctype html>
             <button class="icon" id="btn-rec-y-clear" type="button" title="Clear range">×</button>
           </div>
         </div>
-        <div class="rec-grid cols-2" style="margin-top:7px">
-          <button class="rec-act" data-screen="tap-point"><span class="ico">⊙</span><span>Click @ coordinates</span></button>
+        <div class="rec-grid" style="margin-top:7px">
           <button class="rec-act" data-screen="drag-and-drop" title="Pick a source element, then a drop target"><span class="ico">⛶</span><span>Drag &amp; drop</span></button>
         </div>
       </div>
@@ -1362,6 +1369,7 @@ export const INSPECTOR_HTML = `<!doctype html>
   <div class="loader-spinner"></div>
   <div class="loader-message" id="loader-msg">Loading…</div>
   <div class="loader-sub" id="loader-sub"></div>
+  <button id="loader-cancel" type="button">Cancel</button>
 </div>
 <div id="toasts" aria-live="polite"></div>
 <div id="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title">
@@ -1392,17 +1400,30 @@ export const INSPECTOR_HTML = `<!doctype html>
 
   /** Full-screen loader overlay. Use during multi-second blocking work like
    * opening a WebDriver session or downloading the first snapshot. */
-  function showLoader(msg, sub) {
+  function showLoader(msg, sub, onCancel) {
     const el = $('loader');
     if (!el) return;
     $('loader-msg').textContent = msg || 'Loading…';
     $('loader-sub').textContent = sub || '';
+    // Optional Cancel button — shown only when the caller passes a handler
+    // (e.g. a long cloud connect the user may want to abort).
+    const cancel = $('loader-cancel');
+    if (onCancel) {
+      cancel.onclick = onCancel;
+      cancel.classList.add('shown');
+    } else {
+      cancel.onclick = null;
+      cancel.classList.remove('shown');
+    }
     el.classList.add('shown');
     el.setAttribute('aria-hidden', 'false');
   }
   function hideLoader() {
     const el = $('loader');
     if (!el) return;
+    const cancel = $('loader-cancel');
+    cancel.onclick = null;
+    cancel.classList.remove('shown');
     el.classList.remove('shown');
     el.setAttribute('aria-hidden', 'true');
   }
@@ -1792,13 +1813,14 @@ export const INSPECTOR_HTML = `<!doctype html>
       return;
     }
     const img = $('screen-img');
-    const sx = img.clientWidth / state.viewport.w;
-    const sy = img.clientHeight / state.viewport.h;
+    // Same isotropic scale as imgToDevice (inverse direction) so the highlight
+    // tracks the screenshot, not a per-axis-distorted bounds projection.
+    const scale = Math.min(img.clientWidth / state.viewport.w, img.clientHeight / state.viewport.h);
     const hl = $('highlight');
-    hl.style.left = (b.x * sx) + 'px';
-    hl.style.top = (b.y * sy) + 'px';
-    hl.style.width = (b.w * sx) + 'px';
-    hl.style.height = (b.h * sy) + 'px';
+    hl.style.left = (b.x * scale) + 'px';
+    hl.style.top = (b.y * scale) + 'px';
+    hl.style.width = (b.w * scale) + 'px';
+    hl.style.height = (b.h * scale) + 'px';
     hl.style.display = 'block';
   }
 
@@ -2218,9 +2240,16 @@ export const INSPECTOR_HTML = `<!doctype html>
   function imgToDevice(ev) {
     const img = $('screen-img');
     const rect = img.getBoundingClientRect();
-    const x = (ev.clientX - rect.left) * (state.viewport.w / rect.width);
-    const y = (ev.clientY - rect.top) * (state.viewport.h / rect.height);
-    return { x: Math.round(x), y: Math.round(y) };
+    // One isotropic scale from the inset-free axis. The screenshot can be
+    // taller/wider than the logical bounds space when it includes a system-bar
+    // inset (e.g. BrowserStack Android nav bar); scaling each axis on its own
+    // then distorts the off-inset axis and shifts hit-testing to a neighbour.
+    // max() picks the axis with no inset (its bounds dimension isn't shrunk).
+    const scale = Math.max(state.viewport.w / rect.width, state.viewport.h / rect.height);
+    return {
+      x: Math.round((ev.clientX - rect.left) * scale),
+      y: Math.round((ev.clientY - rect.top) * scale),
+    };
   }
 
   $('screen-img').addEventListener('mouseup', (ev) => {
@@ -2308,8 +2337,8 @@ export const INSPECTOR_HTML = `<!doctype html>
   });
 
   // ─── Hierarchy view-mode toggle (XML / Tree) ─────────────────────
-  // XML is the default — most users want to see the full source.
-  let hierarchyMode = 'xml';
+  // Tree is the default — the structured view is easier to scan; XML is opt-in.
+  let hierarchyMode = 'tree';
   function setHierarchyMode(mode) {
     hierarchyMode = mode;
     document.querySelectorAll('.hier-mode-btn').forEach((b) => {
@@ -4612,14 +4641,24 @@ export const INSPECTOR_HTML = `<!doctype html>
     const targetLabel = isCloudMode()
       ? (connectionMode === 'browserstack' ? 'BrowserStack hub' : 'LambdaTest hub')
       : (body.appium.host + ':' + body.appium.port);
+    // Let the user abort a slow connect. Aborting the fetch stops the client
+    // waiting; the /api/connect/cancel POST tells the server to tear down any
+    // session that still materializes (so it doesn't leak as "Running").
+    const controller = new AbortController();
+    let cancelled = false;
     showLoader(
       'Connecting to ' + targetLabel,
       'Opening a WebDriver session. Cloud sessions can take 30–90 s while the device is provisioned.',
+      () => {
+        cancelled = true;
+        controller.abort();
+        fetch('/api/connect/cancel', { method: 'POST' }).catch(() => {});
+      },
     );
     try {
       const r = await fetch('/api/connect', {
         method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify(body), signal: controller.signal,
       });
       const j = await r.json();
       if (!r.ok || !j.ok) throw new Error(j.error || ('HTTP ' + r.status));
@@ -4632,7 +4671,10 @@ export const INSPECTOR_HTML = `<!doctype html>
       hideLoader();
     } catch (e) {
       hideLoader();
-      showToast(e.message, 'error', { title: 'Connect failed' });
+      // User-initiated cancel — return to setup quietly, no error toast.
+      if (!cancelled && e.name !== 'AbortError') {
+        showToast(e.message, 'error', { title: 'Connect failed' });
+      }
     } finally {
       $('btn-connect').disabled = false;
       $('btn-connect').textContent = 'Connect →';
