@@ -28,11 +28,11 @@ export async function runDoctorChecks(): Promise<DoctorCheck[]> {
   const checks: DoctorCheck[] = [];
 
   checks.push({
-    name: 'Node.js >= 24',
+    name: 'Node.js 24.x–25.x',
     status: isNodeVersionSupported(process.versions.node) ? 'ok' : 'error',
     detail: isNodeVersionSupported(process.versions.node)
       ? process.version
-      : `${process.version} — taqwright requires Node.js 24 or newer`,
+      : `${process.version} — taqwright requires Node.js 24 or 25 (Node 26+ has a known bug)`,
   });
 
   const adb = await commandExists('adb');
@@ -219,11 +219,26 @@ export async function runDoctorChecks(): Promise<DoctorCheck[]> {
   });
 
   const java = await commandExists('java');
-  checks.push({
-    name: 'java (JDK for UiAutomator2)',
-    status: java ? 'ok' : 'warn',
-    detail: java ? 'on PATH' : 'not found — Appium Android driver may fail',
-  });
+  if (!java) {
+    checks.push({
+      name: 'java (JDK for UiAutomator2)',
+      status: 'warn',
+      detail: 'not found — Appium Android driver may fail',
+    });
+  } else {
+    const jver = await readJavaVersion();
+    const level = jver ? classifyJdkVersion(jver) : 'unknown';
+    checks.push({
+      name: 'java (JDK for UiAutomator2)',
+      status: level === 'ok' ? 'ok' : 'warn',
+      detail:
+        level === 'ok'
+          ? `on PATH (v${jver})`
+          : level === 'too-old'
+            ? `v${jver} is too old — Appium/UiAutomator2 + Android build-tools need JDK ${MIN_JDK_MAJOR}+`
+            : 'on PATH but version could not be read',
+    });
+  }
   checks.push(checkJavaHome());
 
   const appium = await commandExists('appium');
@@ -544,6 +559,105 @@ export function classifyAppiumVersion(version: string): AppiumSupportLevel {
 }
 
 /**
+ * JDK adequacy. Appium's UiAutomator2 driver + Android cmdline-tools/build-tools
+ * (the managed bundle ships Temurin 21) need a modern JDK; below this floor a
+ * `java` on PATH is present but unusable. `unknown` = couldn't read the version.
+ */
+export type JdkLevel = 'ok' | 'too-old' | 'unknown';
+const MIN_JDK_MAJOR = 17;
+
+export function classifyJdkVersion(version: string): JdkLevel {
+  // Legacy `1.8.0_372` → major 8; modern `21.0.1` / `17` → major 21 / 17.
+  const m = version.match(/(\d+)(?:\.(\d+))?/);
+  if (!m) return 'unknown';
+  let major = Number(m[1]);
+  if (major === 1 && m[2]) major = Number(m[2]);
+  if (!Number.isFinite(major)) return 'unknown';
+  return major >= MIN_JDK_MAJOR ? 'ok' : 'too-old';
+}
+
+/** Per-component view of the Android toolchain — drives init's install prompt. */
+export interface AndroidToolchainStatus {
+  jdk: JdkLevel | 'missing'; // `java` on PATH, version-classified
+  jdkVersion?: string;
+  sdk: boolean; // `adb` on PATH
+  appium: AppiumSupportLevel | 'missing';
+  appiumVersion?: string;
+  uiautomator2: boolean; // Appium driver installed
+  avd: boolean; // at least one AVD defined
+  avdNames: string[]; // the AVD names found
+  ready: boolean; // a complete, supported toolchain (AVD excluded — device/cloud is fine)
+}
+
+/** Pure: install-skippable only with an adequate JDK + SDK + Appium 3.x + uia2. */
+export function androidToolchainReady(s: {
+  jdk: JdkLevel | 'missing';
+  sdk: boolean;
+  appium: AppiumSupportLevel | 'missing';
+  uiautomator2: boolean;
+}): boolean {
+  return s.jdk === 'ok' && s.sdk && s.appium === 'recommended' && s.uiautomator2;
+}
+
+// java prints its version to stderr: `openjdk version "21.0.1"` /
+// `java version "1.8.0_372"`. `-version` (single dash) works on Java 8 too,
+// where `--version` errors. readCommandOutput captures stderr.
+async function readJavaVersion(): Promise<string | undefined> {
+  const out = await readCommandOutput('java', ['-version']);
+  return out?.match(/version "([^"]+)"/)?.[1];
+}
+
+async function listAvds(): Promise<string[]> {
+  try {
+    const entries = await fs.readdir(avdHomeDir());
+    return entries.filter((e) => e.endsWith('.ini')).map((e) => e.slice(0, -'.ini'.length));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Probe what's already installed (system or a prior `taqwright install`) so init
+ * can skip a redundant managed install. Reuses the same primitives as the doctor
+ * checks; IO-bound, so not unit-covered (the pure `androidToolchainReady` is).
+ */
+export async function detectAndroidToolchain(): Promise<AndroidToolchainStatus> {
+  applyManagedEnv();
+  const [jdkPresent, sdk, appiumPresent] = await Promise.all([
+    commandExists('java'),
+    commandExists('adb'),
+    commandExists('appium'),
+  ]);
+  let jdk: JdkLevel | 'missing' = 'missing';
+  let jdkVersion: string | undefined;
+  if (jdkPresent) {
+    jdkVersion = await readJavaVersion();
+    jdk = jdkVersion ? classifyJdkVersion(jdkVersion) : 'unknown';
+  }
+  let appium: AppiumSupportLevel | 'missing' = 'missing';
+  let appiumVersion: string | undefined;
+  let uiautomator2 = false;
+  if (appiumPresent) {
+    appiumVersion = await readCommandVersion('appium');
+    appium = appiumVersion ? classifyAppiumVersion(appiumVersion) : 'unsupported';
+    const drivers = await readCommandOutput('appium', ['driver', 'list', '--installed']);
+    uiautomator2 = drivers !== undefined && /uiautomator2/.test(drivers);
+  }
+  const avdNames = await listAvds();
+  return {
+    jdk,
+    jdkVersion,
+    sdk,
+    appium,
+    appiumVersion,
+    uiautomator2,
+    avd: avdNames.length > 0,
+    avdNames,
+    ready: androidToolchainReady({ jdk, sdk, appium, uiautomator2 }),
+  };
+}
+
+/**
  * @deprecated Use `classifyAppiumVersion` instead. Returns `true` for any
  * version `taqwright doctor` accepts — including 2.x, which is best-effort.
  */
@@ -553,13 +667,14 @@ export function isAppiumVersionSupported(version: string): boolean {
 }
 
 /**
- * Taqwright requires Node 24+. Appium 3 itself also accepts 20.19+ / 22.12+,
- * but we pin tighter so taqwright projects share one consistent runtime
- * baseline. Exported for testing.
+ * Taqwright requires Node 24.x or 25.x. Appium 3 itself also accepts 20.19+ /
+ * 22.12+, but we pin tighter so taqwright projects share one consistent runtime
+ * baseline — and Node 26+ is excluded because it has a known bug that breaks
+ * taqwright. Exported for testing.
  */
 export function isNodeVersionSupported(version: string): boolean {
   const m = version.match(/^v?(\d+)\./);
   if (!m) return false;
   const major = Number(m[1]);
-  return Number.isFinite(major) && major >= 24;
+  return Number.isFinite(major) && major >= 24 && major < 26;
 }

@@ -145,6 +145,15 @@ export class InspectorSession {
    */
   currentContext = 'NATIVE_APP';
 
+  /**
+   * Set by `cancelConnect()` (Cancel button or a connect timeout) while a
+   * `connect()` is in flight. `WebDriver.newSession()` can't be interrupted, so
+   * the connect path checks this flag the instant a session materializes and
+   * tears it down — otherwise a cancelled/timed-out cloud session leaks as
+   * "Running" on the grid until idle-timeout.
+   */
+  private aborting = false;
+
   /** Serializes device-touching work so snapshot/suggest never interleave. */
   private deviceQueue: Promise<unknown> = Promise.resolve();
   /** Bumped per /api/suggest so a superseded verify loop can bail early. */
@@ -297,6 +306,7 @@ export class InspectorSession {
     if (this.driver) {
       throw new Error('already connected — disconnect first');
     }
+    this.aborting = false;
     if (req.cloud) {
       await this.connectCloud(req.cloud);
     } else {
@@ -331,6 +341,7 @@ export class InspectorSession {
       capabilities,
     });
     this.currentContext = 'NATIVE_APP';
+    await this.abortIfCancelled();
   }
 
   /**
@@ -392,6 +403,30 @@ export class InspectorSession {
     // Store only the user's caps; don't leak the codegen-only override.
     this.lastCapabilities = userCloudCaps;
     this.currentContext = 'NATIVE_APP';
+    await this.abortIfCancelled();
+  }
+
+  /**
+   * If a cancel/timeout landed while `newSession`/`getDevice` was in flight,
+   * tear the just-opened session down (reusing `disconnect()` so a cloud
+   * session is dashboard-synced + deleted, not left "Running") and reject.
+   */
+  private async abortIfCancelled(): Promise<void> {
+    if (!this.aborting) return;
+    await this.disconnect();
+    throw new Error('connect cancelled');
+  }
+
+  /**
+   * Abort an in-flight `connect()` — invoked by the Cancel button
+   * (`/api/connect/cancel`) or a connect timeout. `newSession` can't be
+   * interrupted, so this flags the connect to self-destruct the moment the
+   * session materializes; if it already committed (cancel raced completion),
+   * disconnect now.
+   */
+  cancelConnect(): void {
+    this.aborting = true;
+    if (this.driver) void this.disconnect();
   }
 
   /**
