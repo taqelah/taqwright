@@ -4,10 +4,14 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import path from 'node:path';
 
-/** Stream a URL to a file (follows redirects — Adoptium/Google CDN both 302). */
-export async function download(url: string, destFile: string): Promise<void> {
+/**
+ * Stream a URL to a file (follows redirects — Adoptium/Google CDN both 302).
+ * Pass `signal` (e.g. `AbortSignal.timeout(ms)`) to bound a stalled connection;
+ * an abort surfaces as a rejection the caller can degrade on.
+ */
+export async function download(url: string, destFile: string, signal?: AbortSignal): Promise<void> {
   mkdirSync(path.dirname(destFile), { recursive: true });
-  const res = await fetch(url, { redirect: 'follow' });
+  const res = await fetch(url, { redirect: 'follow', signal });
   if (!res.ok || !res.body) {
     throw new Error(`download failed (HTTP ${res.status}) — ${url}`);
   }

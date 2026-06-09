@@ -5,7 +5,7 @@
 </h1>
 
 <p align="center">
-  <a href="https://github.com/taqelah/taqwright/tags"><img src="https://img.shields.io/badge/version-0.0.16-blue" alt="version" /></a>
+  <a href="https://github.com/taqelah/taqwright/tags"><img src="https://img.shields.io/badge/version-0.0.17-blue" alt="version" /></a>
 </p>
 
 E2E mobile UI testing on the Playwright runner, with a flat locator API on top of Appium 3.
@@ -25,7 +25,7 @@ test('User can login', async ({ mobile }) => {
 
 ## Requirements
 
-- Node.js **24 or newer**.
+- Node.js **24.x or 25.x** (Node 26+ has a known bug).
 - A booted Android emulator, iOS simulator, or connected device.
 - [Appium 3.x](https://appium.io) (`npm i -g appium@^3`) running on `localhost:4723`, with the relevant driver installed:
   - Android: `appium driver install uiautomator2`

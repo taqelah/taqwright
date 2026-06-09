@@ -1,6 +1,6 @@
 {
   "name": "@taqwright/taqwright",
-  "version": "0.0.16",
+  "version": "0.0.17",
   "description": "E2E mobile testing on the Playwright runner",
   "license": "Apache-2.0",
   "repository": {
@@ -25,7 +25,7 @@
     "LICENSE"
   ],
   "engines": {
-    "node": ">=24.0.0"
+    "node": ">=24.0.0 <26.0.0"
   },
   "scripts": {
     "build": "tsc --build && node scripts/copy-assets.mjs",

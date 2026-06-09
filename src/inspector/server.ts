@@ -218,12 +218,26 @@ async function handle(
       json(res, 409, { error: 'already connected' });
       return;
     }
+    // Bound the connect so a stuck device-provisioning (or a TCP-hung hub)
+    // can't spin forever. On any failure, cancelConnect() schedules teardown of
+    // a session that materializes after the timeout, so it never leaks as
+    // "Running" on the cloud grid. Override the 5-minute default via env.
+    const connectMs = Number(process.env.TAQWRIGHT_CONNECT_TIMEOUT_MS) || 300_000;
     try {
-      await session.connect(body);
+      await withTimeout(session.connect(body), connectMs, 'connect');
       json(res, 200, { ok: true, platform: session.platform });
     } catch (err) {
+      session.cancelConnect();
       json(res, 502, { ok: false, error: (err as Error).message });
     }
+    return;
+  }
+
+  // Abort an in-flight connect (Cancel button) — returns immediately; any
+  // session that still materializes is torn down by cancelConnect().
+  if (method === 'POST' && url === '/api/connect/cancel') {
+    session.cancelConnect();
+    json(res, 200, { ok: true });
     return;
   }
 
