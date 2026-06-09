@@ -452,8 +452,8 @@ export async function runInit(argDir: string | undefined, opts: InitOptions = {}
   if (demoAppReady && !demoAvdReady) {
     if (deviceAvdName) {
       console.log(
-        `\nThe config targets the "${deviceAvdName}" AVD — make sure it's booted (or a device\n` +
-          'is connected) before running the test above.',
+        `\nThe config targets the "${deviceAvdName}" AVD — taqwright boots it automatically\n` +
+          'when you run the test above (or uses it if already running).',
       );
     } else if (detected?.avd) {
       console.log(
@@ -917,7 +917,9 @@ function projectBlock(p: Platform, opts: ProjectBlockOpts): string {
           : '          name: /iPhone/,';
   const autoStartDeviceLine = demoAvdWired
     ? `          autoStartDevice: true,   // cold-boots the ${DEMO_AVD_NAME} AVD`
-    : '          // autoStartDevice: true,';
+    : isAndroid && deviceName
+      ? `          autoStartDevice: true,   // cold-boots the ${deviceName} AVD`
+      : '          // autoStartDevice: true,';
   const exampleUdid = isAndroid ? "'emulator-5554'" : "'00000000-0000-0000-0000-000000000000'";
   const exampleOsVersion = isAndroid ? "'14'" : "'17'";
   const examplePath = isAndroid ? "'/absolute/path/to/app.apk'" : "'/absolute/path/to/MyApp.app'";
