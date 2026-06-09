@@ -105,3 +105,30 @@ describe('InspectorSession — contexts over a fake driver', () => {
     assert.equal(recorded.at(-1).context, 'WEBVIEW_com.x');
   });
 });
+
+describe('InspectorSession.cancelConnect', () => {
+  test('tears down a session that already committed (cancel raced completion)', async () => {
+    const s = mkSession();
+    let deleted = 0;
+    // Simulate connect having just stored the driver.
+    s.driver = makeFakeDriver({
+      deleteSession: async () => {
+        deleted++;
+      },
+    });
+    s.platform = Platform.ANDROID;
+
+    s.cancelConnect();
+    // disconnect() is fired without await inside cancelConnect — let it settle.
+    await sleep(0);
+
+    assert.equal(deleted, 1, 'deleteSession should be called to free the device');
+    assert.equal(s.isConnected(), false, 'session should be disconnected after cancel');
+  });
+
+  test('with no driver yet, only arms the abort flag (no throw)', () => {
+    const s = mkSession();
+    assert.doesNotThrow(() => s.cancelConnect());
+    assert.equal(s.isConnected(), false);
+  });
+});
