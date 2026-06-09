@@ -27,6 +27,11 @@
   "engines": {
     "node": ">=24.0.0 <26.0.0"
   },
+  "overrides": {
+    "@wdio/config": {
+      "glob": "^13"
+    }
+  },
   "scripts": {
     "build": "tsc --build && node scripts/copy-assets.mjs",
     "clean": "tsc --build --clean",
