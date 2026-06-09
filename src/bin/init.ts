@@ -431,7 +431,6 @@ export async function runInit(argDir: string | undefined, opts: InitOptions = {}
     );
   }
   console.log('\nCommands:');
-  console.log('  npx taqwright init');
   console.log('  npx taqwright doctor');
   console.log('  npx taqwright codegen');
   console.log('  npx taqwright test');
