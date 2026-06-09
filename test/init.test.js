@@ -174,7 +174,7 @@ describe('configTemplate — managed-AVD gating (item 1)', () => {
     assert.ok(cfg.includes("buildPath: './app/"), 'buildPath still wired');
   });
 
-  test('deviceName: wires the user AVD (uncommented), no auto-boot', () => {
+  test('deviceName: wires the user AVD uncommented and auto-boots it', () => {
     const cfg = configTemplate(['android'], 'tests', {
       demoApp: false,
       demoAvd: false,
@@ -183,7 +183,10 @@ describe('configTemplate — managed-AVD gating (item 1)', () => {
     });
     assert.ok(/^\s*name: 'Pixel_10_Pro_XL',/m.test(cfg), 'should wire the detected AVD name');
     assert.ok(!cfg.includes('// name: /Pixel/'), 'should not leave the commented placeholder');
-    assert.ok(!/^\s*autoStartDevice: true,/m.test(cfg), 'user AVD stays opt-in for auto-boot');
+    assert.ok(
+      /^\s*autoStartDevice: true,/m.test(cfg),
+      'wired AVD should auto-boot (autoStartDevice: true)',
+    );
   });
 
   test('deviceName is ignored when the managed AVD is pinned', () => {
