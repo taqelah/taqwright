@@ -25,7 +25,7 @@ test('User can login', async ({ mobile }) => {
 
 ## Requirements
 
-- Node.js **24 or newer**.
+- Node.js **24.x or 25.x** (Node 26+ has a known bug).
 - A booted Android emulator, iOS simulator, or connected device.
 - [Appium 3.x](https://appium.io) (`npm i -g appium@^3`) running on `localhost:4723`, with the relevant driver installed:
   - Android: `appium driver install uiautomator2`

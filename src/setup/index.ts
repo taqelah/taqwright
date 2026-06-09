@@ -24,16 +24,18 @@ export async function runSetup(opts: SetupOptions = {}): Promise<void> {
   console.log(`taqwright install — vendoring the Android toolchain into:\n  ${home}\n`);
   console.log(
     'Downloads ~700 MB (JDK + Android cmdline-tools + Appium). ' +
-      'No sudo, no shell-rc changes; everything stays under the dir above.\n',
+      'No sudo, and nothing is exported to your shell — your global JAVA_HOME, ' +
+      'ANDROID_HOME and ~/.zshrc/.bashrc are left untouched; taqwright points only ' +
+      'its own commands at the dir above.\n',
   );
 
   console.log('1/4  JDK (Temurin 21)');
   const javaHome = await installJdk(force);
-  console.log(`  ✓ JAVA_HOME=${javaHome}\n`);
+  console.log(`  ✓ JAVA_HOME (taqwright-only) → ${javaHome}\n`);
 
   console.log('2/4  Android SDK (cmdline-tools + platform-tools/adb)');
   const androidHome = await installAndroidSdk(force, javaHome);
-  console.log(`  ✓ ANDROID_HOME=${androidHome}\n`);
+  console.log(`  ✓ ANDROID_HOME (taqwright-only) → ${androidHome}\n`);
 
   console.log(
     `3/4  Appium 3 + uiautomator2 driver${process.platform === 'darwin' ? ' (+ xcuitest)' : ''}`,
@@ -68,13 +70,13 @@ export async function runSetup(opts: SetupOptions = {}): Promise<void> {
 
   console.log(
     '\nAndroid is ready — `npx taqwright test` uses this toolchain automatically ' +
-      '(no shell exports needed).',
+      '(your shell environment is unchanged — no exports needed).',
   );
   console.log(
     process.platform === 'darwin'
       ? 'The xcuitest driver is installed too; for iOS you still need Xcode + a booted ' +
-          'simulator (cannot be auto-installed), plus Node ≥ 24.'
-      : 'Still manual (cannot be auto-installed): Node ≥ 24 and the iOS/Xcode stack.',
+          'simulator (cannot be auto-installed), plus Node 24.x or 25.x.'
+      : 'Still manual (cannot be auto-installed): Node 24.x or 25.x and the iOS/Xcode stack.',
   );
   if (opts.printEnv) {
     console.log('\nTo also use this toolchain from your own shell, add:');
