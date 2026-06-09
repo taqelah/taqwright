@@ -8,7 +8,7 @@ import { stdin, stdout } from 'node:process';
 import { runSetup } from '../setup/index.js';
 import { download } from '../setup/archive.js';
 import { spawnTool } from '../setup/spawn-tool.js';
-import { detectAndroidToolchain, type AndroidToolchainStatus } from '../doctor.js';
+import { detectAndroidToolchain, listAvds, type AndroidToolchainStatus } from '../doctor.js';
 
 const execP = promisify(exec);
 
@@ -72,6 +72,9 @@ export async function runInit(argDir: string | undefined, opts: InitOptions = {}
   // Set (interactive, Android) when we point the sample config at the user's own
   // AVD instead of the managed one. undefined → keep the commented placeholder.
   let deviceAvdName: string | undefined;
+  // The toolchain probe result (interactive, Android); undefined otherwise. Read
+  // by the post-scaffold guidance so it respects a detected toolchain / AVD.
+  let detected: AndroidToolchainStatus | undefined;
 
   if (!interactive) {
     const dirInput = argDir ?? './taqwright-tests';
@@ -146,7 +149,6 @@ export async function runInit(argDir: string | undefined, opts: InitOptions = {}
       // present (system or a prior `taqwright install`), skip the prompt; else
       // show what's missing and offer the managed bundle. `--install-toolchain`
       // (an explicit flag) always wins.
-      let detected: AndroidToolchainStatus | undefined;
       if (opts.installToolchain !== undefined) {
         installToolchain = opts.installToolchain;
       } else if (!platforms.includes('android')) {
@@ -202,17 +204,10 @@ export async function runInit(argDir: string | undefined, opts: InitOptions = {}
             ? detected.avdNames[0]
             : await askAvdChoice(rl, detected.avdNames);
       }
-      // Default yes — it's a small APK and makes the example test runnable
-      // immediately. Android-only (it's an .apk; no iOS demo build).
-      demoApp =
-        opts.demoApp ??
-        (platforms.includes('android')
-          ? await yesNo(
-              rl,
-              'Download the demo app so the example test runs out of the box? (~58 MB)',
-              true,
-            )
-          : false);
+      // Auto-download for Android (no prompt) — the example test is a no-op stub
+      // without it. No iOS demo build (it's an .apk); --no-demo-app opts out
+      // (CI/offline); the download degrades gracefully on failure.
+      demoApp = (opts.demoApp ?? true) && platforms.includes('android');
     } finally {
       rl.close();
     }
@@ -420,16 +415,28 @@ export async function runInit(argDir: string | undefined, opts: InitOptions = {}
   console.log('\nNext steps:');
   console.log(`  cd ${cdHint}`);
   if (!install) console.log('  npm install');
-  if (platforms.includes('android') && !toolchainInstalled) {
-    console.log(
-      '  npx taqwright install --with-avd   # Android toolchain + emulator (JDK + SDK + Appium + AVD); drop --with-avd to skip the ~1 GB emulator',
-    );
-  } else if (platforms.includes('android') && !withAvd) {
-    // Toolchain installed but the emulator was skipped — show how to add one.
-    console.log(
-      '  npx taqwright install --with-avd   # add an Android emulator (~1 GB), or use a physical device',
-    );
+  if (platforms.includes('android')) {
+    // Prefer the probe result; otherwise a cheap FS scan (covers non-interactive)
+    // so we never tell a user with an emulator to create one (`--with-avd`).
+    const hasAvd = detected?.avd ?? (await listAvds()).length > 0;
+    if (toolchainInstalled && !withAvd && !hasAvd) {
+      // Toolchain installed but no emulator anywhere — show how to add one.
+      console.log(
+        '  npx taqwright install --with-avd   # add an Android emulator (~1 GB), or use a physical device',
+      );
+    } else if (!toolchainInstalled && !detected?.ready) {
+      // Toolchain genuinely missing (non-interactive, or detected not-ready and
+      // the user declined). A detected-ready toolchain prints nothing here.
+      console.log(
+        hasAvd
+          ? '  npx taqwright install   # Android toolchain (JDK + SDK + Appium) — you already have an emulator'
+          : '  npx taqwright install --with-avd   # Android toolchain + emulator (JDK + SDK + Appium + AVD); drop --with-avd to skip the ~1 GB emulator',
+      );
+    }
   }
+  // The objective of the whole sequence — listed last so any prerequisites
+  // (npm install / toolchain install) come before it.
+  console.log('  npx taqwright test');
   console.log('\nCommands:');
   console.log('  npx taqwright doctor');
   console.log('  npx taqwright codegen');
@@ -443,11 +450,22 @@ export async function runInit(argDir: string | undefined, opts: InitOptions = {}
     );
   }
   if (demoAppReady && !demoAvdReady) {
-    console.log(
-      '\nThe demo app is wired, but no managed emulator was created. Start an Android\n' +
-        'emulator/device yourself, or run `npx taqwright install --with-avd` to create the\n' +
-        'bundled AVD, then set device.name + autoStartDevice in taqwright.config.ts.',
-    );
+    if (deviceAvdName) {
+      console.log(
+        `\nThe config targets the "${deviceAvdName}" AVD — make sure it's booted (or a device\n` +
+          'is connected) before running the test above.',
+      );
+    } else if (detected?.avd) {
+      console.log(
+        '\nBoot one of your emulators (or connect a device) and set device.name in\n' +
+          'taqwright.config.ts before running the test above.',
+      );
+    } else {
+      console.log(
+        '\nNo emulator was found — run `npx taqwright install --with-avd` to create one (or\n' +
+          'connect a device), then set device.name + autoStartDevice in taqwright.config.ts.',
+      );
+    }
   }
   console.log('');
 }
@@ -743,6 +761,14 @@ function packageJsonTemplate(name: string): string {
       // The upper bound is intentional — accept the `npm install` engine
       // warnings on out-of-range runtimes over silently running on a broken one.
       node: '>=24.0.0 <26.0.0',
+    },
+    // @wdio/config (a transitive dep via webdriver) still pins the deprecated
+    // glob@10; taqwright never uses its glob-based spec resolution (Playwright is
+    // the runner), so force a non-deprecated glob to keep `npm install` clean.
+    overrides: {
+      '@wdio/config': {
+        glob: '^13',
+      },
     },
   };
   return JSON.stringify(obj, null, 2) + '\n';
