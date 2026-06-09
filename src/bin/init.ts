@@ -1,6 +1,6 @@
 import { mkdir, writeFile, readdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { resolve, join, basename, relative } from 'node:path';
+import { resolve, join, basename, relative, dirname } from 'node:path';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createInterface } from 'node:readline/promises';
@@ -45,11 +45,16 @@ export interface InitOptions {
 }
 
 export async function runInit(argDir: string | undefined, opts: InitOptions = {}): Promise<void> {
-  const fullyScripted =
+  const scripted =
     argDir !== undefined &&
     opts.testDir !== undefined &&
     opts.platform !== undefined &&
     opts.install !== undefined;
+  // Only prompt when there's a real TTY and the run isn't already fully
+  // specified by flags. No TTY (CI, piped stdin) → resolve everything from
+  // flags + their documented defaults rather than hang on readline or
+  // silently take a default mid-prompt. Partial flags + a TTY still prompt.
+  const interactive = Boolean(stdin.isTTY) && !scripted;
 
   console.log('\ntaqwright init — scaffold a new project\n');
 
@@ -61,24 +66,38 @@ export async function runInit(argDir: string | undefined, opts: InitOptions = {}
   let withAvd: boolean;
   let demoApp: boolean;
 
-  if (fullyScripted) {
-    targetDir = resolve(process.cwd(), argDir!);
+  if (!interactive) {
+    const dirInput = argDir ?? './taqwright-tests';
+    targetDir = resolve(process.cwd(), dirInput);
     if (existsSync(targetDir) && (await isNonEmpty(targetDir)) && !opts.yes) {
       console.error(
         `error: "${targetDir}" is not empty. Re-run with --yes to write into it anyway.`,
       );
       process.exit(1);
     }
-    testDir = opts.testDir!;
-    platforms = opts.platform === 'both' ? ['android', 'ios'] : [opts.platform as Platform];
-    install = opts.install!;
-    // Scripted/CI: never auto-download (toolchain ~700 MB; demo app a few
-    // MB) unless explicitly opted in — keeps CI deterministic + offline.
+    testDir = opts.testDir ?? 'tests';
+    if (!isValidTestDir(testDir)) {
+      console.error(
+        `error: invalid --test-dir "${testDir}" — use a simple folder name (no "/", "..", or absolute path).`,
+      );
+      process.exit(1);
+    }
+    platforms =
+      opts.platform === 'both' ? ['android', 'ios'] : [(opts.platform ?? 'android') as Platform];
+    install = opts.install ?? true;
+    // Scripted/CI: never auto-download (toolchain ~700 MB; demo app ~58 MB)
+    // unless explicitly opted in — keeps CI deterministic + offline.
     installToolchain = opts.installToolchain ?? false;
     // The emulator lives inside the managed SDK, so it only makes sense when
     // the toolchain installs. Scripted/CI: opt-in only (~1 GB system image).
     withAvd = (opts.withAvd ?? false) && installToolchain;
     demoApp = (opts.demoApp ?? false) && platforms.includes('android');
+    if (!stdin.isTTY && !scripted) {
+      console.log(
+        `(no TTY — running non-interactively: dir=${dirInput}, testDir=${testDir}, ` +
+          `platform=${opts.platform ?? 'android'}, install=${install})\n`,
+      );
+    }
   } else {
     const rl = createInterface({ input: stdin, output: stdout });
     try {
@@ -97,7 +116,13 @@ export async function runInit(argDir: string | undefined, opts: InitOptions = {}
         }
       }
 
-      testDir = opts.testDir ?? (await ask(rl, 'Test folder name', 'tests'));
+      testDir = opts.testDir ?? (await askTestDir(rl));
+      if (!isValidTestDir(testDir)) {
+        console.error(
+          `error: invalid --test-dir "${testDir}" — use a simple folder name (no "/", "..", or absolute path).`,
+        );
+        process.exit(1);
+      }
       const platformInput =
         opts.platform ??
         ((await askChoice(rl, 'Platform', ['android', 'ios', 'both'], 'android')) as
@@ -148,6 +173,7 @@ export async function runInit(argDir: string | undefined, opts: InitOptions = {}
     }
   }
   const projectName = basename(targetDir);
+  const pkgName = toPackageName(projectName);
 
   await mkdir(join(targetDir, testDir), { recursive: true });
 
@@ -159,7 +185,9 @@ export async function runInit(argDir: string | undefined, opts: InitOptions = {}
     const apkPath = join(targetDir, 'app', DEMO_APK_FILENAME);
     process.stdout.write(`\nDownloading the demo app (${DEMO_APK_FILENAME})… `);
     try {
-      await download(DEMO_APK_URL, apkPath);
+      // Bound a stalled connection so it can't hang the whole scaffold — the
+      // catch below degrades gracefully, but only fires on an error/abort.
+      await download(DEMO_APK_URL, apkPath, AbortSignal.timeout(120_000));
       demoAppReady = true;
       console.log('done.');
     } catch (err) {
@@ -172,25 +200,59 @@ export async function runInit(argDir: string | undefined, opts: InitOptions = {}
     }
   }
 
+  // The demo example uses Android-only selectors (UiSelector/xpath), so it must
+  // never run against an iOS project. For a `both` scaffold with the demo,
+  // scope each project to its own subfolder; otherwise one shared
+  // example.spec.ts is fine (the generic stub is platform-agnostic).
+  const scopeForBoth = platforms.length === 2 && demoAppReady;
+  // Only pin + auto-boot the managed AVD when the emulator was actually
+  // requested — otherwise the config references an AVD that was never created.
+  const demoAvdReady = demoAppReady && withAvd;
+
   const files: Array<[string, string]> = [
-    ['package.json', packageJsonTemplate(projectName)],
+    ['package.json', packageJsonTemplate(pkgName)],
     ['.npmrc', npmrcTemplate()],
     ['tsconfig.json', tsconfigTemplate(testDir)],
-    ['taqwright.config.ts', configTemplate(platforms, testDir, demoAppReady)],
-    [join(testDir, 'example.spec.ts'), exampleTestTemplate(demoAppReady)],
-    ['.gitignore', gitignoreTemplate()],
+    [
+      'taqwright.config.ts',
+      configTemplate(platforms, testDir, {
+        demoApp: demoAppReady,
+        demoAvd: demoAvdReady,
+        scoped: scopeForBoth,
+      }),
+    ],
   ];
+  if (scopeForBoth) {
+    files.push([join(testDir, 'android', 'example.spec.ts'), exampleTestTemplate(true)]);
+    files.push([join(testDir, 'ios', 'example.spec.ts'), exampleTestTemplate(false)]);
+  } else {
+    files.push([join(testDir, 'example.spec.ts'), exampleTestTemplate(demoAppReady)]);
+  }
+  files.push(['.gitignore', gitignoreTemplate()]);
 
+  const written: string[] = [];
+  const skipped: string[] = [];
   for (const [rel, content] of files) {
-    await writeFile(join(targetDir, rel), content);
+    const dest = join(targetDir, rel);
+    // Don't clobber a file the user already has unless they passed --yes.
+    if (existsSync(dest) && !opts.yes) {
+      skipped.push(rel);
+      continue;
+    }
+    await mkdir(dirname(dest), { recursive: true });
+    await writeFile(dest, content);
+    written.push(rel);
   }
 
-  console.log('\nCreated:');
-  for (const [rel] of files) {
-    console.log('  ' + join(relative(process.cwd(), targetDir) || '.', rel));
+  const showRoot = relative(process.cwd(), targetDir) || '.';
+  if (written.length) {
+    console.log('\nCreated:');
+    for (const rel of written) console.log('  ' + join(showRoot, rel));
+    if (demoAppReady) console.log('  ' + join(showRoot, 'app', DEMO_APK_FILENAME));
   }
-  if (demoAppReady) {
-    console.log('  ' + join(relative(process.cwd(), targetDir) || '.', 'app', DEMO_APK_FILENAME));
+  if (skipped.length) {
+    console.log('\nSkipped (already exist — re-run with --yes to overwrite):');
+    for (const rel of skipped) console.log('  ' + join(showRoot, rel));
   }
 
   const cdHint = relative(process.cwd(), targetDir) || '.';
@@ -199,13 +261,8 @@ export async function runInit(argDir: string | undefined, opts: InitOptions = {}
     const linkedDev = await isTaqwrightGloballyLinked();
     if (linkedDev) {
       console.log(
-        '\nDetected globally-linked taqwright — using `npm link @taqwright/taqwright` instead of fetching from the registry.',
+        '\nDetected globally-linked taqwright — will `npm link @taqwright/taqwright` after install (instead of fetching from the registry).',
       );
-      const linkCode = await runNpm(['link', '@taqwright/taqwright'], targetDir);
-      if (linkCode !== 0) {
-        console.error('npm link @taqwright/taqwright failed.');
-        process.exit(linkCode);
-      }
     }
 
     console.log('\nRunning npm install …');
@@ -222,9 +279,19 @@ export async function runInit(argDir: string | undefined, opts: InitOptions = {}
         console.error('Verify your GitHub SSH key with:  ssh -T git@github.com');
         console.error('To use a local taqwright build instead:');
         console.error('  cd /path/to/taqwright && npm link');
-        console.error(`  cd ${cdHint} && npm link @taqwright/taqwright && npm install`);
+        console.error(`  cd ${cdHint} && npm install && npm link @taqwright/taqwright`);
       }
       process.exit(code);
+    }
+
+    // Link LAST — `npm install` reconciles node_modules against the git+ssh
+    // devDependency and would otherwise clobber an earlier symlink.
+    if (linkedDev) {
+      const linkCode = await runNpm(['link', '@taqwright/taqwright'], targetDir);
+      if (linkCode !== 0) {
+        console.error('npm link @taqwright/taqwright failed.');
+        process.exit(linkCode);
+      }
     }
   }
 
@@ -273,6 +340,13 @@ export async function runInit(argDir: string | undefined, opts: InitOptions = {}
       '\nNo demo app was added — the example test is a no-op stub. Drop an APK in\n' +
         'app/ and set buildPath/appBundleId in taqwright.config.ts, or re-run\n' +
         '`npx taqwright init --demo-app` to fetch the demo app.',
+    );
+  }
+  if (demoAppReady && !demoAvdReady) {
+    console.log(
+      '\nThe demo app is wired, but no managed emulator was created. Start an Android\n' +
+        'emulator/device yourself, or run `npx taqwright install --with-avd` to create the\n' +
+        'bundled AVD, then set device.name + autoStartDevice in taqwright.config.ts.',
     );
   }
   console.log('');
@@ -328,6 +402,33 @@ async function isNonEmpty(dir: string): Promise<boolean> {
   }
 }
 
+// A plain folder name only — a slash / `..` / absolute path would write
+// outside the project and leak into the tsconfig `include` glob.
+export function isValidTestDir(name: string): boolean {
+  if (!name || name === '.' || name === '..') return false;
+  if (/[\\/]/.test(name)) return false;
+  return true;
+}
+
+async function askTestDir(rl: ReturnType<typeof createInterface>): Promise<string> {
+  while (true) {
+    const name = await ask(rl, 'Test folder name', 'tests');
+    if (isValidTestDir(name)) return name;
+    console.log('  please use a simple folder name (no "/", "..", or absolute path)');
+  }
+}
+
+// `basename` can be anything the filesystem allows, but `package.json` "name"
+// must be a valid npm name: lowercase, no spaces, no leading dot/underscore.
+export function toPackageName(raw: string): string {
+  const cleaned = raw
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]+/g, '-')
+    .replace(/^[._-]+/, '')
+    .replace(/-+$/, '');
+  return cleaned || 'taqwright-tests';
+}
+
 function runNpm(args: string[], cwd: string): Promise<number> {
   return new Promise((resolve_) => {
     const child = spawnTool('npm', args, { cwd, stdio: 'inherit' });
@@ -376,10 +477,10 @@ function packageJsonTemplate(name: string): string {
       typescript: '^5.4.0',
     },
     engines: {
-      // Taqwright targets the latest Node LTS (24+). Appium itself still
-      // accepts 20.19+ / 22.12+, but we keep the engines range tight here
-      // so generated projects pin a consistent runtime.
-      node: '>=24.0.0',
+      // Match Appium's real floor (20.19+ / 22.12+) rather than pinning the
+      // latest LTS — a tighter range only spams `npm install` with engine
+      // warnings on supported runtimes where tests run fine.
+      node: '>=20.19.0',
     },
   };
   return JSON.stringify(obj, null, 2) + '\n';
@@ -402,8 +503,31 @@ function tsconfigTemplate(testDir: string): string {
   return JSON.stringify(obj, null, 2) + '\n';
 }
 
-function configTemplate(platforms: Platform[], testDir: string, demoApp: boolean): string {
-  const projects = platforms.map((p) => projectBlock(p, demoApp)).join(',\n');
+export interface ConfigTemplateOpts {
+  /** Demo APK landed → wire buildPath/resetBetweenTests to it. */
+  demoApp: boolean;
+  /** Emulator was created → safe to pin + auto-boot the managed AVD. */
+  demoAvd: boolean;
+  /** `both` + demo → scope each project to its own test subfolder. */
+  scoped: boolean;
+}
+
+export function configTemplate(
+  platforms: Platform[],
+  testDir: string,
+  opts: ConfigTemplateOpts,
+): string {
+  const projects = platforms
+    .map((p) =>
+      projectBlock(p, {
+        demoApp: opts.demoApp,
+        demoAvd: opts.demoAvd,
+        // Point each project at its own subfolder so the Android-only demo
+        // spec never runs against the iOS project (its selectors throw on iOS).
+        scopedTestMatch: opts.scoped ? `'**/${p}/**'` : undefined,
+      }),
+    )
+    .join(',\n');
   return `import { defineConfig, Platform } from '@taqwright/taqwright';
 
 // Every config knob is listed here. Essentials are uncommented; everything
@@ -471,27 +595,44 @@ ${projects},
 `;
 }
 
-function projectBlock(p: Platform, demoApp: boolean): string {
+interface ProjectBlockOpts {
+  demoApp: boolean;
+  demoAvd: boolean;
+  // Uncommented `testMatch` glob literal (a quoted glob like '**/android/**'),
+  // or undefined to leave the commented placeholder.
+  scopedTestMatch?: string;
+}
+
+function projectBlock(p: Platform, opts: ProjectBlockOpts): string {
+  const { demoApp, demoAvd, scopedTestMatch } = opts;
   const isAndroid = p === 'android';
-  // The "demo wired" path (Android + demo APK downloaded) makes the project
-  // turnkey: pin the managed AVD + auto-boot it. Without the demo app the
-  // user brings their own app *and* device, so keep the commented
-  // placeholders rather than forcing taqwright's AVD on them.
+  // `demoWired` controls buildPath/reset (device-agnostic); `demoAvdWired`
+  // controls pinning + auto-booting the managed AVD — only safe when the
+  // emulator was actually created, else the config references a missing AVD.
   const demoWired = isAndroid && demoApp;
+  const demoAvdWired = isAndroid && demoAvd;
   const platformConst = isAndroid ? 'Platform.ANDROID' : 'Platform.IOS';
   const projectName = isAndroid ? 'android' : 'ios';
-  const deviceNameLine = demoWired
+  const deviceNameLine = demoAvdWired
     ? `          name: '${DEMO_AVD_NAME}',          // AVD from \`taqwright install --with-avd\``
-    : isAndroid
-      ? '          // name: /Pixel/,'
-      : '          name: /iPhone/,';
-  const autoStartDeviceLine = demoWired
+    : demoWired
+      ? '          // name: /Pixel/,   // no managed AVD — bring a running device, or `taqwright install --with-avd`'
+      : isAndroid
+        ? '          // name: /Pixel/,'
+        : '          name: /iPhone/,';
+  const autoStartDeviceLine = demoAvdWired
     ? `          autoStartDevice: true,   // cold-boots the ${DEMO_AVD_NAME} AVD`
     : '          // autoStartDevice: true,';
   const exampleUdid = isAndroid ? "'emulator-5554'" : "'00000000-0000-0000-0000-000000000000'";
   const exampleOsVersion = isAndroid ? "'14'" : "'17'";
   const examplePath = isAndroid ? "'/absolute/path/to/app.apk'" : "'/absolute/path/to/MyApp.app'";
   const exampleBundleId = isAndroid ? "'com.example.app'" : "'com.example.MyApp'";
+  // The per-project test-runner `testMatch` line: uncommented + scoped when a
+  // `both`+demo scaffold needs to isolate each project to its own subfolder,
+  // otherwise the usual commented placeholder.
+  const testMatchLine = scopedTestMatch
+    ? `      testMatch: [${scopedTestMatch}],`
+    : `      // testMatch: ['**/${projectName}/*.spec.ts'],`;
   // When the demo APK was downloaded, wire the Android project to it so
   // `npx taqwright test` works immediately; otherwise leave the usual
   // commented placeholders. iOS always stays commented (no demo build).
@@ -619,11 +760,11 @@ ${resetBlock}
       // grep: /smoke/,
       // grepInvert: /flaky/,
       // dependencies: ['setup'],
-      // testMatch: ['**/${projectName}/*.spec.ts'],
+${testMatchLine}
     }`;
 }
 
-function exampleTestTemplate(demoApp: boolean): string {
+export function exampleTestTemplate(demoApp: boolean): string {
   if (demoApp) {
     return `import { test, expect } from '@taqwright/taqwright';
 
@@ -724,9 +865,16 @@ playwright-report
 }
 
 function npmrcTemplate(): string {
-  return `@taqwright:registry=https://npm.pkg.github.com
-# Auth: GitHub Packages needs a Personal Access Token with read:packages.
-# Don't commit the token — put it in your user ~/.npmrc or a CI env var, e.g.:
+  // NOTE: pre-publish, @taqwright/taqwright installs over git+ssh (see the
+  // devDependency in package.json), so NO registry/token is needed right now —
+  // a working GitHub SSH key (`ssh -T git@github.com`) is enough. The lines
+  // below are inert today; they're the auth you'll need once the package ships
+  // to GitHub Packages and the devDependency switches to a versioned range.
+  return `# Active path today: @taqwright/taqwright installs over git+ssh — no token needed.
+# Future (once published to GitHub Packages), uncomment and supply a token:
+# @taqwright:registry=https://npm.pkg.github.com
+#   Auth needs a Personal Access Token with read:packages. Don't commit it —
+#   put it in your user ~/.npmrc or a CI env var, e.g.:
 #   //npm.pkg.github.com/:_authToken=\${NODE_AUTH_TOKEN}
 `;
 }
