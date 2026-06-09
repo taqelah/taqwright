@@ -607,7 +607,8 @@ async function readJavaVersion(): Promise<string | undefined> {
   return out?.match(/version "([^"]+)"/)?.[1];
 }
 
-async function listAvds(): Promise<string[]> {
+/** Cheap, FS-only list of defined AVD names (no subprocess). */
+export async function listAvds(): Promise<string[]> {
   try {
     const entries = await fs.readdir(avdHomeDir());
     return entries.filter((e) => e.endsWith('.ini')).map((e) => e.slice(0, -'.ini'.length));
