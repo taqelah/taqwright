@@ -1,4 +1,8 @@
-import { type TaqwrightUseOptions, type LambdaTestDeviceConfig } from '../../types/index.js';
+import {
+  Platform,
+  type TaqwrightUseOptions,
+  type LambdaTestDeviceConfig,
+} from '../../types/index.js';
 import { CloudProvider, type CloudSpec } from '../cloud.js';
 
 const SESSION_API = 'https://mobile-api.lambdatest.com/mobile-automation/api/v1';
@@ -18,36 +22,67 @@ function normalizeDevice(name: string, osVersion: string): { name: string; osVer
   };
 }
 
-function buildCapabilities(use: TaqwrightUseOptions, projectName: string, appUrl: string) {
+/**
+ * Per-session capabilities in LambdaTest's W3C shape. The wdio/Appium-3 client
+ * rejects any capability that isn't standard, `appium:`-prefixed, or inside a
+ * vendor `xxx:options` object — so LambdaTest's caps live under `lt:options`
+ * (with `w3c: true`), `platformName` stays top-level (standard W3C), and the
+ * Appium driver caps are `appium:`-prefixed. Exported for testing.
+ */
+export function buildCapabilities(use: TaqwrightUseOptions, projectName: string, appUrl: string) {
   const device = use.device as LambdaTestDeviceConfig;
   const resolved = normalizeDevice(device.name, device.osVersion);
   const ciLabel =
     process.env.GITHUB_ACTIONS === 'true' ? `CI ${process.env.GITHUB_RUN_ID}` : process.env.USER;
+  const isIOS = use.platform === Platform.IOS;
+  const platformName = isIOS ? 'iOS' : 'Android';
+
+  // Deep-merge a user-supplied `lt:options` (a shallow `...use.capabilities`
+  // spread would replace the whole object). Remaining user caps are split: W3C-
+  // valid keys (standard `platformName` or `:`-namespaced like `appium:*`) pass
+  // through at the top level; any BARE cap (e.g. a codegen `autoGrantPermissions`)
+  // is a LambdaTest cap and must go inside `lt:options`, else the W3C client
+  // rejects it.
+  const userCaps = { ...(use.capabilities ?? {}) } as Record<string, unknown>;
+  const userLt = (userCaps['lt:options'] as Record<string, unknown> | undefined) ?? {};
+  delete userCaps['lt:options'];
+  const topLevelUser: Record<string, unknown> = {};
+  const bareUserLt: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(userCaps)) {
+    if (k === 'platformName' || k.includes(':')) topLevelUser[k] = v;
+    else bareUserLt[k] = v;
+  }
 
   return {
-    deviceName: resolved.name,
-    platformVersion: resolved.osVersion,
-    deviceOrientation: device.orientation,
-    // Taqwright defaults to Appium 3 on the cloud too. Appium 2.x runs
-    // best-effort locally (every `mobile:` command shape is identical across
-    // the two majors); to select 2.x on the cloud, override via
-    // `use.capabilities.appiumVersion`. Cloud device pools don't carry every
-    // Appium version — check the grid's matrix for your chosen device.
-    appiumVersion: '3.0.0',
-    platformName: use.platform,
-    queueTimeout: 600,
-    idleTimeout: 600,
-    app: appUrl,
-    devicelog: true,
-    video: true,
-    build: `${projectName} ${use.platform} ${ciLabel}`,
-    project: projectName,
-    autoGrantPermissions: true,
-    autoAcceptAlerts: true,
-    isRealMobile: true,
-    enableImageInjection: device.enableCameraImageInjection,
-    'settings[snapshotMaxDepth]': 62,
-    ...(use.capabilities ?? {}),
+    platformName,
+    'appium:automationName': isIOS ? 'XCUITest' : 'UiAutomator2',
+    // `snapshotMaxDepth` is XCUITest-only — UiAutomator2 rejects unknown settings.
+    ...(isIOS ? { 'appium:settings[snapshotMaxDepth]': 62 } : {}),
+    'lt:options': {
+      w3c: true,
+      platformName,
+      deviceName: resolved.name,
+      platformVersion: resolved.osVersion,
+      deviceOrientation: device.orientation,
+      app: appUrl,
+      isRealMobile: true,
+      build: `${projectName} ${use.platform} ${ciLabel}`,
+      project: projectName,
+      video: true,
+      devicelog: true,
+      queueTimeout: 600,
+      idleTimeout: 600,
+      // `appiumVersion` is intentionally NOT pinned: LambdaTest's supported
+      // Appium matrix varies by device (3.0.0 is rejected on many), so let the
+      // grid pick its supported default. Pin one via
+      // `use.capabilities['lt:options'].appiumVersion` if a device needs it.
+      autoGrantPermissions: true,
+      autoAcceptAlerts: true,
+      enableImageInjection: device.enableCameraImageInjection,
+      ...userLt,
+      ...bareUserLt,
+    },
+    ...topLevelUser,
   };
 }
 
