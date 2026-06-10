@@ -72,10 +72,10 @@ export function buildCapabilities(use: TaqwrightUseOptions, projectName: string,
       devicelog: true,
       queueTimeout: 600,
       idleTimeout: 600,
-      // Taqwright defaults to Appium 3 on the cloud too. Override via
-      // `use.capabilities['lt:options'].appiumVersion` for 2.x — cloud device
-      // pools don't carry every Appium version (check the grid's matrix).
-      appiumVersion: '3.0.0',
+      // `appiumVersion` is intentionally NOT pinned: LambdaTest's supported
+      // Appium matrix varies by device (3.0.0 is rejected on many), so let the
+      // grid pick its supported default. Pin one via
+      // `use.capabilities['lt:options'].appiumVersion` if a device needs it.
       autoGrantPermissions: true,
       autoAcceptAlerts: true,
       enableImageInjection: device.enableCameraImageInjection,
