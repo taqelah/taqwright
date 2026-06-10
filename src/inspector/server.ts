@@ -1446,6 +1446,39 @@ export interface CloudDevice {
   realDevice: boolean;
 }
 
+/**
+ * Parse LambdaTest's `/mobile-automation/api/v1/list` response into CloudDevices.
+ * Shape-tolerant: the array may be top-level, under `devices`, or under `data`
+ * (LambdaTest wraps several endpoints under `data`), and per-device field names
+ * vary — so we fall back across the common spellings. Pure; exported for testing.
+ */
+export function parseLambdatestDevices(raw: unknown): CloudDevice[] {
+  const r = (raw ?? {}) as Record<string, unknown>;
+  const arr: unknown[] = Array.isArray(raw)
+    ? raw
+    : Array.isArray(r.devices)
+      ? (r.devices as unknown[])
+      : Array.isArray(r.data)
+        ? (r.data as unknown[])
+        : [];
+  const devices: CloudDevice[] = [];
+  for (const item of arr) {
+    const d = item as Record<string, unknown>;
+    const name = d.deviceName ?? d.device ?? d.name;
+    if (!name) continue;
+    const os = String(d.platformName ?? d.platform ?? d.os ?? d.osName ?? '');
+    const version = d.osVersion ?? d.version ?? d.os_version ?? d.platformVersion;
+    devices.push({
+      provider: 'lambdatest',
+      platform: os.toLowerCase().includes('ios') ? 'ios' : 'android',
+      deviceName: String(name),
+      osVersion: version != null ? String(version) : '',
+      realDevice: true,
+    });
+  }
+  return devices;
+}
+
 async function fetchCloudDevices(
   provider: 'browserstack' | 'lambdatest',
   user: string,
@@ -1484,16 +1517,26 @@ async function fetchCloudDevices(
   if (!r.ok) {
     throw new Error(`LambdaTest devices API returned ${r.status} — check credentials.`);
   }
-  const raw = (await r.json()) as {
-    devices?: Array<{ deviceName: string; platformName: string; osVersion: string }>;
-  };
-  return (raw.devices ?? []).map((d) => ({
-    provider,
-    platform: d.platformName.toLowerCase().includes('ios') ? 'ios' : 'android',
-    deviceName: d.deviceName,
-    osVersion: d.osVersion,
-    realDevice: true,
-  }));
+  const raw = await r.json();
+  const devices = parseLambdatestDevices(raw);
+  if (devices.length === 0) {
+    // A 200 with an unrecognized shape used to yield a silent empty list. Surface
+    // it instead: log the raw body and return an actionable error to the picker.
+    const keys =
+      raw && typeof raw === 'object' && !Array.isArray(raw)
+        ? Object.keys(raw).join(', ')
+        : typeof raw;
+    console.error(
+      '[taqwright] LambdaTest device list — unrecognized response:',
+      JSON.stringify(raw).slice(0, 800),
+    );
+    throw new Error(
+      `LambdaTest returned 200 but no devices could be parsed (top-level: ${keys}). ` +
+        'If your account region is not "us", the us list can be empty. ' +
+        'Check the inspector server logs for the raw response.',
+    );
+  }
+  return devices;
 }
 
 async function inspectIpa(p: string): Promise<AppInspectResult> {
