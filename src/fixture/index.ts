@@ -21,6 +21,7 @@ import {
   isTransientDeviceError,
 } from '../inspector/devices.js';
 import { logger } from '../logger.js';
+import { avdBootPreflightError } from '../setup/avd.js';
 import { createDeviceProvider, isCloudProvider } from '../providers/index.js';
 import { Tracer } from '../tracer/index.js';
 import { wrapForTracing } from '../tracer/proxy.js';
@@ -129,7 +130,24 @@ async function withDeviceReadyRetry<T>(
 async function createLocalSession(use: TaqwrightUseOptions): Promise<WebDriverClient> {
   const newSession = () => WebDriver.newSession(appiumRemoteOptions(use));
   const serial = await localAndroidSerial(use);
-  if (!serial) return newSession();
+  if (!serial) {
+    // No resolved serial → about to cold-boot (or non-resolvable). For a named
+    // Android emulator AVD that autoStartDevice will boot, pre-flight its system
+    // image so a managed-SDK / system-AVD mismatch fails clearly instead of a
+    // cryptic emulator "Broken AVD system path" FATAL.
+    const device = use.device as { provider?: string; name?: string | RegExp };
+    const avdName = typeof device.name === 'string' ? device.name : undefined;
+    if (
+      use.platform === Platform.ANDROID &&
+      device.provider === 'emulator' &&
+      avdName &&
+      use.appium?.autoStartDevice !== false
+    ) {
+      const err = await avdBootPreflightError(avdName);
+      if (err) throw new Error(err);
+    }
+    return newSession();
+  }
   return withDeviceReadyRetry(serial, 'session creation', newSession);
 }
 
