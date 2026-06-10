@@ -38,11 +38,20 @@ export function buildCapabilities(use: TaqwrightUseOptions, projectName: string,
   const platformName = isIOS ? 'iOS' : 'Android';
 
   // Deep-merge a user-supplied `lt:options` (a shallow `...use.capabilities`
-  // spread would replace the whole object); other user caps (appium:* /
-  // standard) still pass through at the top level.
+  // spread would replace the whole object). Remaining user caps are split: W3C-
+  // valid keys (standard `platformName` or `:`-namespaced like `appium:*`) pass
+  // through at the top level; any BARE cap (e.g. a codegen `autoGrantPermissions`)
+  // is a LambdaTest cap and must go inside `lt:options`, else the W3C client
+  // rejects it.
   const userCaps = { ...(use.capabilities ?? {}) } as Record<string, unknown>;
   const userLt = (userCaps['lt:options'] as Record<string, unknown> | undefined) ?? {};
   delete userCaps['lt:options'];
+  const topLevelUser: Record<string, unknown> = {};
+  const bareUserLt: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(userCaps)) {
+    if (k === 'platformName' || k.includes(':')) topLevelUser[k] = v;
+    else bareUserLt[k] = v;
+  }
 
   return {
     platformName,
@@ -71,8 +80,9 @@ export function buildCapabilities(use: TaqwrightUseOptions, projectName: string,
       autoAcceptAlerts: true,
       enableImageInjection: device.enableCameraImageInjection,
       ...userLt,
+      ...bareUserLt,
     },
-    ...userCaps,
+    ...topLevelUser,
   };
 }
 

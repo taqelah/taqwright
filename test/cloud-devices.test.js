@@ -123,6 +123,32 @@ describe('LambdaTest buildCapabilities (W3C shape)', () => {
     assert.equal(ios['appium:settings[snapshotMaxDepth]'], 62);
   });
 
+  test('bare user caps relocate into lt:options (codegen perm-off)', () => {
+    const caps = buildLambdatestCaps(
+      { ...baseUse, capabilities: { autoGrantPermissions: false, autoAcceptAlerts: false } },
+      'p',
+      'lt://A',
+    );
+    // Not leaked to the top level (the failure mode) ...
+    assert.ok(!('autoGrantPermissions' in caps) && !('autoAcceptAlerts' in caps));
+    // ... and applied inside lt:options.
+    assert.equal(caps['lt:options'].autoGrantPermissions, false);
+    assert.equal(caps['lt:options'].autoAcceptAlerts, false);
+    // Every top-level key is still W3C-valid.
+    for (const k of Object.keys(caps)) {
+      assert.ok(k === 'platformName' || k.includes(':'), `bare key "${k}" leaked top-level`);
+    }
+  });
+
+  test('appium:-prefixed user caps still pass through top-level', () => {
+    const caps = buildLambdatestCaps(
+      { ...baseUse, capabilities: { 'appium:newCommandTimeout': 300 } },
+      'p',
+      'lt://A',
+    );
+    assert.equal(caps['appium:newCommandTimeout'], 300);
+  });
+
   test('user lt:options deep-merges (does not wipe defaults)', () => {
     const caps = buildLambdatestCaps(
       { ...baseUse, capabilities: { 'lt:options': { appiumVersion: '2.11.0', tunnel: true } } },
