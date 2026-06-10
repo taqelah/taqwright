@@ -4,6 +4,7 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseLambdatestDevices } from '../dist/inspector/server.js';
+import { omitLocalEmulatorCaps } from '../dist/capabilities.js';
 
 describe('parseLambdatestDevices', () => {
   test('parses the { devices: [...] } shape', () => {
@@ -55,5 +56,25 @@ describe('parseLambdatestDevices', () => {
     assert.deepEqual(parseLambdatestDevices([]), []);
     assert.deepEqual(parseLambdatestDevices(null), []);
     assert.deepEqual(parseLambdatestDevices({ unexpected: 1 }), []);
+  });
+});
+
+describe('omitLocalEmulatorCaps', () => {
+  test('drops local emulator caps, keeps the rest', () => {
+    const out = omitLocalEmulatorCaps({
+      'appium:avd': 'Pixel_10_Pro_XL',
+      'appium:avdLaunchTimeout': 120000,
+      'appium:avdReadyTimeout': 120000,
+      'appium:newCommandTimeout': 240,
+      'appium:autoGrantPermissions': true,
+    });
+    assert.deepEqual(out, {
+      'appium:newCommandTimeout': 240,
+      'appium:autoGrantPermissions': true,
+    });
+  });
+  test('no local caps → unchanged', () => {
+    const caps = { 'appium:newCommandTimeout': 240 };
+    assert.deepEqual(omitLocalEmulatorCaps(caps), caps);
   });
 });

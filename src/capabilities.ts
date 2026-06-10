@@ -106,6 +106,28 @@ export function buildCapabilities(
   return { ...caps, ...userCaps } as Capabilities.RequestedStandaloneCapabilities;
 }
 
+/**
+ * Capabilities that only make sense for a LOCAL Android emulator auto-boot
+ * (set by the `androidAutoBoot` path above). A cloud provider selects its device
+ * by `deviceName` + `platformVersion`, so these would be wrong/ignored there —
+ * the inspector seeds its form from the local config, so strip them before a
+ * cloud connect.
+ */
+export const LOCAL_EMULATOR_CAP_KEYS = [
+  'appium:avd',
+  'appium:avdLaunchTimeout',
+  'appium:avdReadyTimeout',
+];
+
+/** Drop the local-emulator-only caps (see {@link LOCAL_EMULATOR_CAP_KEYS}). Pure. */
+export function omitLocalEmulatorCaps(caps: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(caps)) {
+    if (!LOCAL_EMULATOR_CAP_KEYS.includes(k)) out[k] = v;
+  }
+  return out;
+}
+
 export function appiumRemoteOptions(use: TaqwrightUseOptions): Capabilities.RemoteConfig {
   return {
     hostname: use.appium?.host ?? 'localhost',
