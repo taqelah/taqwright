@@ -1,6 +1,7 @@
 import { existsSync, promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { readManifest } from './paths.js';
 
 /**
  * Shared AVD ↔ system-image helpers. An AVD's `config.ini` records the system
@@ -52,4 +53,34 @@ export async function readAvdSystemImage(
 /** True when `image` (an SDK-relative `image.sysdir.1`) exists under `androidHome`. */
 export function isAvdImageInstalled(image: string, androidHome: string): boolean {
   return existsSync(path.join(androidHome, image));
+}
+
+/**
+ * Pre-flight for an autoStartDevice cold boot: returns a clear, actionable error
+ * string if the named AVD's system image is absent from the active `ANDROID_HOME`
+ * (so the emulator would die with "Broken AVD system path"), else `null`. The
+ * usual cause is a managed taqwright SDK overriding `ANDROID_HOME` while the AVD
+ * belongs to the user's system SDK. Mirrors the doctor `checkManagedSdkAvdImages`
+ * fixes, scoped to the single AVD being booted.
+ */
+export async function avdBootPreflightError(
+  avdName: string,
+  androidHome: string | undefined = process.env.ANDROID_HOME,
+): Promise<string | null> {
+  if (!androidHome) return null; // can't check — let the boot surface its own error
+  const image = await readAvdSystemImage(avdName);
+  if (!image || isAvdImageInstalled(image, androidHome)) return null; // unknown or fine
+  const sdkmanager = `sdkmanager "${image.replace(/\//g, ';')}"`;
+  const head = `Cannot boot AVD "${avdName}": its system image "${image}" is not in the active SDK (ANDROID_HOME=${androidHome}).`;
+  if (readManifest()) {
+    const manifest = path.join(path.dirname(androidHome), 'manifest.json');
+    return (
+      `${head}\n` +
+      'A managed taqwright toolchain is overriding ANDROID_HOME, but this AVD belongs to your system SDK. Fix one of:\n' +
+      `  (a) use your system SDK — \`rm ${manifest}\` (drops the managed override), then re-run;\n` +
+      `  (b) install the image into the managed SDK — \`${sdkmanager}\`;\n` +
+      "  (c) point device.name at a managed AVD (e.g. 'taqwright_api34')."
+    );
+  }
+  return `${head}\nInstall it with \`${sdkmanager}\`, or recreate the AVD against an installed image.`;
 }
