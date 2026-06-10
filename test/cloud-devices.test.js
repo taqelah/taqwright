@@ -106,6 +106,8 @@ describe('LambdaTest buildCapabilities (W3C shape)', () => {
     assert.equal(lt.platformVersion, '14');
     assert.equal(lt.app, 'lt://APP');
     assert.ok(String(lt.build).length > 0);
+    // appiumVersion is intentionally unpinned — the grid picks its supported one.
+    assert.ok(!('appiumVersion' in lt));
     // No bare device/app keys leaked to the top level (the failure mode).
     assert.ok(!('deviceName' in caps) && !('app' in caps) && !('build' in caps));
   });
