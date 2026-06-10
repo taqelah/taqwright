@@ -52,3 +52,16 @@ jobs:
       - run: npm ci
       # `npm test` runs the build first (which also serves as the typecheck).
       - run: npm test
+
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      # Fail only on high/critical advisories (reads package-lock.json; no install
+      # needed). Free dependency-vuln scanning that works on private repos.
+      - run: npm audit --audit-level=high
