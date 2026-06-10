@@ -8,6 +8,7 @@ import {
   type DeviceOrientation,
 } from '../types/index.js';
 import { isPortOpen } from '../auto-appium.js';
+import { omitLocalEmulatorCaps } from '../capabilities.js';
 import { startAppiumServer, killAppiumOnPort } from '../providers/appium.js';
 import { createDeviceProvider } from '../providers/index.js';
 import { Recorder, type RecordedAction } from './recorder.js';
@@ -373,7 +374,10 @@ export class InspectorSession {
     // record the grant step. Override the providers' true-defaults via
     // use.capabilities (merged last by both providers), using each provider's
     // own key naming. An explicit user value still wins.
-    const userCloudCaps = cloud.capabilities ?? {};
+    // Strip local-emulator-only caps (appium:avd, …) — the inspector seeds its
+    // form from the local config, so a cloud selection can carry them in; they'd
+    // be wrong on a cloud provider (which picks the device by name + version).
+    const userCloudCaps = omitLocalEmulatorCaps(cloud.capabilities ?? {});
     const permKeys =
       cloud.provider === 'browserstack'
         ? ['appium:autoGrantPermissions', 'appium:autoAcceptAlerts']

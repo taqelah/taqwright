@@ -3932,6 +3932,17 @@ export const INSPECTOR_HTML = `<!doctype html>
     updateConnectSummary();
   }
 
+  /** Remove local-emulator-only cap rows (appium:avd, …) — wrong for cloud. */
+  function stripLocalOnlyExtras() {
+    var localOnly = ['appium:avd', 'appium:avdLaunchTimeout', 'appium:avdReadyTimeout'];
+    var rows = document.querySelectorAll('#extras-list .extra-cap');
+    rows.forEach(function (div) {
+      var k = String(div.querySelector('.extra-key').value || '').trim();
+      if (localOnly.indexOf(k) !== -1) div.remove();
+    });
+    updateConnectSummary();
+  }
+
   /** Read all extras rows into an array of {key, value} (skips empty keys). */
   function readExtras() {
     const out = [];
@@ -4468,6 +4479,9 @@ export const INSPECTOR_HTML = `<!doctype html>
         osVersion: dev.osVersion ?? '',
       };
       $('cap-udid').value = '';
+      // Cloud picks the device by name + version — drop any local-emulator-only
+      // caps (appium:avd, …) that were seeded from the local config.
+      stripLocalOnlyExtras();
     } else {
       selectedCloudDevice = null;
       $('cap-udid').value = dev.udid;
