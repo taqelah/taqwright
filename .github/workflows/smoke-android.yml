@@ -1,0 +1,109 @@
+name: Smoke (Android)
+
+# Manual end-to-end smoke test: installs the PUBLISHED @taqwright/taqwright from
+# npm, scaffolds a fresh project, boots an Android emulator, and runs the demo
+# login spec against the real demo app. Manual-only so it never runs (or bills)
+# unless explicitly triggered.
+on:
+  workflow_dispatch:
+
+jobs:
+  android-smoke:
+    name: Scaffold + run sample test on an Android emulator
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      # Hardware acceleration for the emulator (ubuntu-latest runners expose KVM).
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      # UiAutomator2 driver needs a JDK on PATH.
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      # taqwright's appium.autoStart spawns `appium` from PATH — install it + the
+      # Android driver up front so the run doesn't pay a cold `npx appium` fetch.
+      - name: Install Appium + UiAutomator2 driver
+        run: |
+          npm install -g appium@^3
+          appium driver install uiautomator2
+
+      # Scaffold from the published package. --no-install skips the scaffold's
+      # git+ssh devDependency (0.0.24); --demo-app downloads DemoApp-v1.0.0.apk
+      # and writes the login example spec.
+      - name: Scaffold a taqwright project
+        run: |
+          npx @taqwright/taqwright@latest init smoke \
+            --platform android --demo-app \
+            --no-install-toolchain --no-with-avd --no-install -y
+
+      # Install the real package from npm (overwrites the git+ssh devDep line).
+      - name: Install project dependencies from npm
+        working-directory: smoke
+        run: npm install --save-dev @taqwright/taqwright@latest typescript @types/node
+
+      # The scaffolded config guesses a placeholder AVD name; point it at the
+      # emulator the action will boot (emulator-5554) and tell taqwright not to
+      # cold-boot it (autoStartDevice: false) but to start Appium (autoStart: true).
+      - name: Point config at the CI emulator
+        run: |
+          cat > smoke/taqwright.config.ts <<'EOF'
+          import { defineConfig, Platform } from '@taqwright/taqwright';
+
+          export default defineConfig({
+            testDir: './tests',
+            projects: [
+              {
+                name: 'android',
+                use: {
+                  platform: Platform.ANDROID,
+                  device: { provider: 'emulator', udid: 'emulator-5554' },
+                  resetBetweenTests: true,
+                  buildPath: './app/DemoApp-v1.0.0.apk',
+                  appBundleId: 'com.taqelah.demo_app',
+                  appium: {
+                    autoStart: true,
+                    autoStartDevice: false,
+                    host: 'localhost',
+                    port: 4723,
+                  },
+                },
+              },
+            ],
+          });
+          EOF
+
+      # Creates the AVD, boots it with KVM, and runs `script` once it's online.
+      - name: Boot emulator + run the sample test
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          force-avd-creation: true
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -no-boot-anim -camera-back none
+          disable-animations: true
+          script: cd smoke && npm test
+
+      - name: Upload report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: smoke/playwright-report/
+          if-no-files-found: ignore
+          retention-days: 7
