@@ -1,9 +1,10 @@
 name: Scaffold check
 
-# Manual, emulator-free check that the PUBLISHED @taqwright/taqwright scaffolds a
-# valid Android project from both onboarding entry points (`taqwright init` and
-# `npm init taqwright`), and that the generated config + example spec typecheck
-# against the published package's types.
+# Manual checks on the PUBLISHED @taqwright/taqwright scaffolding:
+#  - init-scaffold / create-taqwright: fast, emulator-free — verify both onboarding
+#    entry points scaffold a valid Android project that typechecks.
+#  - scaffold-and-run: end-to-end — scaffold, then let TAQWRIGHT create the AVD and
+#    run the demo login spec on that taqwright-created emulator.
 on:
   workflow_dispatch:
 
@@ -66,3 +67,89 @@ jobs:
           done
           npm install --save-dev @taqwright/taqwright@latest typescript @types/node
           npx tsc --noEmit
+
+  scaffold-and-run:
+    name: scaffold + taqwright-created AVD + run tests
+    runs-on: ubuntu-latest
+    # Heavy: `--with-avd` pulls a managed JDK + SDK + system image (~2 GB) and the
+    # emulator cold-boots inside the first test.
+    timeout-minutes: 45
+
+    steps:
+      # Hardware acceleration for the emulator (ubuntu-latest runners expose KVM).
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      # taqwright provisions everything: --install-toolchain pulls a managed JDK +
+      # SDK + Appium + uiautomator2 into ~/.cache/taqwright, --with-avd creates AVD
+      # `taqwright_api34`, --demo-app downloads DemoApp-v1.0.0.apk + writes the spec.
+      - name: Scaffold + provision toolchain & AVD via taqwright
+        run: |
+          npx @taqwright/taqwright@latest init proj \
+            --platform android --demo-app \
+            --install-toolchain --with-avd --no-install -y
+
+      - name: Install project dependencies from npm
+        working-directory: proj
+        run: npm install --save-dev @taqwright/taqwright@latest typescript @types/node
+
+      # Keep taqwright-managed boot (string device.name -> appium:avd) but inject
+      # headless emulator flags (taqwright's own launcher isn't headless-safe, so
+      # boot goes through Appium with -no-window via avdArgs) and a large timeout
+      # since the first test cold-boots the AVD + installs uiautomator2 + the APK.
+      - name: Write CI config (headless avdArgs + timeout)
+        run: |
+          cat > proj/taqwright.config.ts <<'EOF'
+          import { defineConfig, Platform } from '@taqwright/taqwright';
+
+          export default defineConfig({
+            testDir: './tests',
+            timeout: 300000,
+            projects: [
+              {
+                name: 'android',
+                use: {
+                  platform: Platform.ANDROID,
+                  // String name -> taqwright sets appium:avd so Appium boots this AVD.
+                  device: { provider: 'emulator', name: 'taqwright_api34' },
+                  resetBetweenTests: true,
+                  buildPath: './app/DemoApp-v1.0.0.apk',
+                  appBundleId: 'com.taqelah.demo_app',
+                  appium: {
+                    autoStart: true,
+                    autoStartDevice: true,
+                    host: 'localhost',
+                    port: 4723,
+                  },
+                  capabilities: {
+                    'appium:avdArgs': '-no-window -no-audio -no-boot-anim -gpu swiftshader_indirect',
+                  },
+                },
+              },
+            ],
+          });
+          EOF
+
+      # taqwright starts (managed) Appium, which boots taqwright_api34 headless and
+      # runs the demo login specs.
+      - name: Run the sample test
+        working-directory: proj
+        run: npm test
+
+      - name: Upload report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: proj/playwright-report/
+          if-no-files-found: ignore
+          retention-days: 7
