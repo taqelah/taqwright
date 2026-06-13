@@ -1,0 +1,68 @@
+name: Scaffold check
+
+# Manual, emulator-free check that the PUBLISHED @taqwright/taqwright scaffolds a
+# valid Android project from both onboarding entry points (`taqwright init` and
+# `npm init taqwright`), and that the generated config + example spec typecheck
+# against the published package's types.
+on:
+  workflow_dispatch:
+
+jobs:
+  init-scaffold:
+    name: taqwright init (android)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      # --no-install skips the scaffold's git+ssh devDependency (0.0.24); we
+      # install the real npm package below.
+      - name: Scaffold
+        run: |
+          npx @taqwright/taqwright@latest init proj \
+            --platform android --no-install -y
+
+      - name: Assert scaffolded files exist
+        working-directory: proj
+        run: |
+          for f in package.json tsconfig.json taqwright.config.ts tests/example.spec.ts; do
+            test -f "$f" || { echo "missing expected scaffold file: $f"; exit 1; }
+          done
+
+      # Installing @latest overwrites the git+ssh devDep line, then we typecheck
+      # the generated taqwright.config.ts + example.spec.ts against real types.
+      - name: Install from npm + typecheck
+        working-directory: proj
+        run: |
+          npm install --save-dev @taqwright/taqwright@latest typescript @types/node
+          npx tsc --noEmit
+
+  create-taqwright:
+    name: npm init taqwright (create-taqwright delegator)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      # Exercises the create-taqwright package → it resolves @taqwright/taqwright
+      # and delegates to `taqwright init`. Args after `--` are forwarded verbatim.
+      - name: Scaffold via npm init taqwright
+        run: |
+          npm init taqwright@latest -- proj --platform android --no-install -y
+
+      - name: Assert files + typecheck
+        working-directory: proj
+        run: |
+          for f in package.json tsconfig.json taqwright.config.ts tests/example.spec.ts; do
+            test -f "$f" || { echo "missing expected scaffold file: $f"; exit 1; }
+          done
+          npm install --save-dev @taqwright/taqwright@latest typescript @types/node
+          npx tsc --noEmit
