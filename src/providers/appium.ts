@@ -5,7 +5,7 @@ import path from 'node:path';
 import { Platform } from '../types/index.js';
 import { logger } from '../logger.js';
 import { getLatestBuildToolsVersions } from '../utils.js';
-import { managedEnv } from '../setup/paths.js';
+import { androidEnvForAvd } from '../setup/avd.js';
 import { spawnTool } from '../setup/spawn-tool.js';
 
 const execP = promisify(exec);
@@ -82,10 +82,16 @@ export interface AppiumServerSpawnOptions {
  * Tries the `appium` binary on PATH first (avoids `npx`'s global cache
  * lock, which serializes parallel taqwright processes). Falls back to
  * `npx appium` if no global install is found.
+ *
+ * `avdName` (an Android emulator AVD this server will be asked to boot) selects
+ * which Android SDK the server's env points at: the managed toolchain by default,
+ * or the user's system SDK when that's where the AVD's system image lives
+ * (see {@link androidEnvForAvd}).
  */
-export function startAppiumServer(
+export async function startAppiumServer(
   provider: string,
   opts: AppiumServerSpawnOptions = {},
+  avdName?: string,
 ): Promise<ChildProcess> {
   const args: string[] = [];
   if (opts.host) args.push('--address', opts.host);
@@ -98,25 +104,31 @@ export function startAppiumServer(
   // feature name to be scoped to a driver (or `*` for all installed drivers).
   args.push('--allow-insecure=*:chromedriver_autodownload');
 
-  return spawnAppium('appium', args, provider).catch((err: NodeJS.ErrnoException) => {
+  // Merge the taqwright-managed toolchain (from `taqwright install`) so the
+  // spawned server + its UiAutomator2 driver find the vendored adb/JDK. AVD-aware:
+  // falls back to the system SDK when the target AVD lives there. No-op when setup
+  // hasn't run. Covers the inspector-server path too (it doesn't go through the
+  // CLI entry's applyManagedEnv()).
+  const env = { ...process.env, ...((await androidEnvForAvd(avdName)) ?? {}) };
+
+  return spawnAppium('appium', args, provider, env, avdName).catch((err: NodeJS.ErrnoException) => {
     if (err.code === 'ENOENT') {
-      return spawnAppium('npx', ['appium', ...args], provider);
+      return spawnAppium('npx', ['appium', ...args], provider, env, avdName);
     }
     throw err;
   });
 }
 
-function spawnAppium(cmd: string, args: string[], provider: string): Promise<ChildProcess> {
+function spawnAppium(
+  cmd: string,
+  args: string[],
+  provider: string,
+  env: NodeJS.ProcessEnv,
+  avdName?: string,
+): Promise<ChildProcess> {
   let emulatorStartRequested = false;
   return new Promise((resolve, reject) => {
-    // Merge the taqwright-managed toolchain (from `taqwright install`) so the
-    // spawned server + its UiAutomator2 driver find the vendored adb/JDK.
-    // No-op when setup hasn't run. Covers the inspector-server path too
-    // (it doesn't go through the CLI entry's applyManagedEnv()).
-    const proc = spawnTool(cmd, args, {
-      stdio: 'pipe',
-      env: { ...process.env, ...(managedEnv() ?? {}) },
-    });
+    const proc = spawnTool(cmd, args, { stdio: 'pipe', env });
     let settled = false;
     let stderrText = '';
     proc.stderr?.on('data', (data: Buffer) => {
@@ -152,7 +164,7 @@ function spawnAppium(cmd: string, args: string[], provider: string): Promise<Chi
       if (output.includes('Could not find online devices')) {
         if (!emulatorStartRequested && provider === 'emulator') {
           emulatorStartRequested = true;
-          await startAndroidEmulator().catch((err) => logger.error(err));
+          await startAndroidEmulator(avdName, env.ANDROID_HOME).catch((err) => logger.error(err));
         }
       }
       if (output.includes('Appium REST http interface listener started')) {
@@ -267,8 +279,10 @@ export function isEmulatorInstalled(platform: Platform): Promise<boolean> {
   });
 }
 
-export async function startAndroidEmulator(): Promise<void> {
-  const androidHome = process.env.ANDROID_HOME;
+export async function startAndroidEmulator(
+  avdName?: string,
+  androidHome: string | undefined = process.env.ANDROID_HOME,
+): Promise<void> {
   if (!androidHome) throw new Error('ANDROID_HOME is not set.');
   const emulatorPath = path.join(androidHome, 'emulator', 'emulator');
   const { stdout } = await execP(`${emulatorPath} -list-avds`);
@@ -279,7 +293,9 @@ export async function startAndroidEmulator(): Promise<void> {
   if (avds.length === 0) {
     throw new Error('No installed emulators found.');
   }
-  const avd = avds[0]!;
+  // Boot the requested AVD when it's available in this SDK; else fall back to the
+  // first listed (legacy behavior for callers that don't name one).
+  const avd = avdName && avds.includes(avdName) ? avdName : avds[0]!;
   logger.log(`Starting emulator: ${avd}`);
   const child = spawn(emulatorPath, ['-avd', avd], { stdio: 'pipe' });
   await new Promise<void>((resolve, reject) => {

@@ -1,9 +1,12 @@
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
-import { manifestPath, readManifest } from '../setup/paths.js';
-import { avdHomeDir, isAvdImageInstalled, readAvdSystemImage } from '../setup/avd.js';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
+import { androidEnvForAvd, resolveAvdSdk } from '../setup/avd.js';
 
 const execFileP = promisify(execFile);
+
+const exe = (name: string): string => (process.platform === 'win32' ? `${name}.exe` : name);
 
 export type DeviceState = 'booted' | 'shutdown' | 'booting' | 'unknown';
 
@@ -20,19 +23,20 @@ export interface Device {
   avdName?: string;
   /** iOS-only: the simulator runtime ID (e.g. `com.apple.CoreSimulator.SimRuntime.iOS-17-5`). */
   runtime?: string;
+  /**
+   * `false` when a shutdown AVD's system image is installed in no known SDK, so
+   * it cannot boot (the UI disables Start + shows {@link bootHint}). Left
+   * `undefined` for bootable / running devices.
+   */
+  bootable?: boolean;
+  /** Short reason an AVD is unbootable (shown in the picker). */
+  bootHint?: string;
 }
 
 export interface DeviceListing {
   android: Device[];
   ios: Device[];
   toolsMissing: { adb?: boolean; emulator?: boolean; xcrun?: boolean };
-  /**
-   * Shutdown Android AVDs hidden from `android` because their system image
-   * isn't in the active (managed) SDK, so the managed emulator can't boot them.
-   * Present only when a managed SDK is active and ≥1 AVD was hidden — lets the
-   * UI explain why and point at the manifest to delete.
-   */
-  hiddenAndroid?: { names: string[]; manifestPath: string };
 }
 
 // ─── Discovery ────────────────────────────────────────────────────
@@ -43,44 +47,38 @@ export async function listDevices(): Promise<DeviceListing> {
     process.platform === 'darwin' ? listIos().catch(() => [] as Device[]) : Promise.resolve([]),
     detectMissingTools(),
   ]);
-  const { android, hiddenAndroid } = await filterAndroidByActiveSdk(androidAll);
-  return { android, ios, toolsMissing, hiddenAndroid };
+  const android = await annotateAndroidBootability(androidAll);
+  return { android, ios, toolsMissing };
 }
 
 /**
- * When a managed SDK is active (a `manifest.json` exists and overrode
- * `ANDROID_HOME`), drop *shutdown* AVDs whose system image isn't installed in
- * that SDK — the managed `emulator` can't boot them (it hangs on a never-
- * resolving "Trying to find <avd>" loop). Booted/online emulators are kept (an
- * already-running device is usable regardless of which SDK started it). With no
- * manifest, the user's own SDK is active — return everything unfiltered.
+ * Flag *shutdown* Android AVDs whose system image is installed in **no** known
+ * SDK (managed / `ANDROID_HOME` / system) — nothing can boot them — with
+ * `bootable: false` + a `bootHint`, so the picker can disable Start and explain
+ * why instead of leading into a doomed boot. AVDs whose image lives in *some*
+ * SDK are left untouched (taqwright boots them against the right SDK; see
+ * {@link androidEnvForAvd} / {@link resolveAvdSdk}). Running devices and AVDs we
+ * can't tie to a config are left as-is. Returns all devices (no hiding).
  */
-async function filterAndroidByActiveSdk(
-  devices: Device[],
-): Promise<{ android: Device[]; hiddenAndroid?: DeviceListing['hiddenAndroid'] }> {
-  const androidHome = process.env.ANDROID_HOME;
-  if (!readManifest() || !androidHome) return { android: devices };
-
-  const avdHome = avdHomeDir();
-  const kept: Device[] = [];
-  const hidden: string[] = [];
+export async function annotateAndroidBootability(devices: Device[]): Promise<Device[]> {
+  const out: Device[] = [];
   for (const dev of devices) {
-    // Keep anything already running, or that we can't tie to an AVD config.
-    if (dev.state !== 'shutdown' || !dev.avdName) {
-      kept.push(dev);
+    if (dev.state !== 'shutdown' || dev.type !== 'android' || !dev.avdName) {
+      out.push(dev);
       continue;
     }
-    const image = await readAvdSystemImage(dev.avdName, avdHome);
-    // Unknown image → don't hide (avoid dropping a device on a parse miss).
-    if (image === undefined || isAvdImageInstalled(image, androidHome)) {
-      kept.push(dev);
+    const { image, sdkRoot } = await resolveAvdSdk(dev.avdName);
+    if (image && !sdkRoot) {
+      out.push({
+        ...dev,
+        bootable: false,
+        bootHint: `system image "${image}" is not installed in any Android SDK`,
+      });
     } else {
-      hidden.push(dev.name);
+      out.push(dev);
     }
   }
-
-  if (hidden.length === 0) return { android: kept };
-  return { android: kept, hiddenAndroid: { names: hidden, manifestPath: manifestPath() } };
+  return out;
 }
 
 async function detectMissingTools(): Promise<DeviceListing['toolsMissing']> {
@@ -230,20 +228,96 @@ async function onlineAdbDevices(): Promise<Map<string, OnlineDevice>> {
 }
 
 export async function startAndroidEmulator(avdName: string): Promise<void> {
-  if (!(await commandExists('emulator'))) {
-    throw new Error('`emulator` is not on PATH. Install Android SDK command-line tools and retry.');
+  // Boot against the SDK that actually contains this AVD's system image (managed
+  // / ANDROID_HOME / system). Fail fast + clearly when no SDK has it instead of
+  // handing the emulator a doomed root and relying on its raw FATAL.
+  const { image, sdkRoot } = await resolveAvdSdk(avdName);
+  if (image && !sdkRoot) {
+    throw new Error(
+      `Cannot boot "${avdName}": its system image "${image}" is not installed in any Android ` +
+        `SDK (checked the managed SDK, ANDROID_HOME, and your system SDK). Install it with ` +
+        `\`sdkmanager "${image.replace(/\//g, ';')}"\`, or recreate the AVD against an installed image.`,
+    );
   }
-  // Detached so the boot survives our process. The user can stop it via
-  // the Devices card or `adb -s <serial> emu kill`. `windowsHide` suppresses
-  // the extra console window Windows would otherwise allocate for the detached
-  // console-subsystem `emulator.exe` (it dumps verbose config there); no-op on
-  // macOS/Linux. The emulator's own GUI window is unaffected.
-  const child = spawn('emulator', ['-avd', avdName], {
-    detached: true,
-    stdio: 'ignore',
+  // Merge onto process.env — androidEnvForAvd / managedEnv return only the SDK/JDK
+  // keys, so passing them raw would strip SystemRoot/TEMP/… and break the child on
+  // Windows. Then pin ANDROID_HOME/ANDROID_SDK_ROOT to the SDK that has the image
+  // (so the emulator binary + image resolution agree).
+  const env = { ...process.env, ...((await androidEnvForAvd(avdName)) ?? {}) };
+  if (sdkRoot) {
+    env.ANDROID_HOME = sdkRoot;
+    env.ANDROID_SDK_ROOT = sdkRoot;
+  } else if (env.ANDROID_HOME && !env.ANDROID_SDK_ROOT) {
+    env.ANDROID_SDK_ROOT = env.ANDROID_HOME;
+  }
+
+  const resolved = env.ANDROID_HOME
+    ? path.join(env.ANDROID_HOME, 'emulator', exe('emulator'))
+    : undefined;
+  const cmd = resolved && existsSync(resolved) ? resolved : 'emulator';
+  if (cmd === 'emulator' && !(await commandExists('emulator'))) {
+    throw new Error(
+      'No Android SDK found to boot the emulator — set ANDROID_HOME (or run `taqwright install`).',
+    );
+  }
+  // POSIX: detach so the boot survives our process (own session). Windows: do
+  // NOT detach — DETACHED_PROCESS leaves the console-subsystem `emulator.exe`
+  // with no console, so it AllocConsole()s a *visible* window and dumps its
+  // launch config there (windowsHide/CREATE_NO_WINDOW can't suppress a console
+  // allocated after start). Without detach, windowsHide gives a hidden console
+  // and the process still outlives us (Windows doesn't auto-kill children). The
+  // emulator's own GUI window is unaffected. Stop via the Devices card / `adb emu kill`.
+  const child = spawn(cmd, ['-avd', avdName], {
+    detached: process.platform !== 'win32',
+    stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
+    env,
   });
-  child.unref();
+  // Surface an *immediate* launch failure (bad SDK root, missing system image,
+  // ENOENT) within a short grace window so the UI shows a real error instead of
+  // spinning on "booting" for 90 s. After the window, let it keep booting in the
+  // background (the UI polls /api/devices for full boot). The emulator prints its
+  // reason ("Broken AVD system path", "Cannot find AVD", …) to *stdout* on
+  // Windows, so capture both streams. Stop buffering after the window — draining
+  // (not destroying) avoids an EPIPE that could kill the emulator.
+  let out = '';
+  const accumulate = (d: Buffer): void => {
+    out += d.toString();
+  };
+  child.stdout?.on('data', accumulate);
+  child.stderr?.on('data', accumulate);
+  await new Promise<void>((resolve, reject) => {
+    const done = (): void => {
+      clearTimeout(timer);
+      child.off('exit', onExit);
+      child.off('error', onError);
+    };
+    const onExit = (code: number | null): void => {
+      done();
+      const tail = out.trim().split('\n').slice(-12).join('\n');
+      reject(
+        new Error(
+          `Emulator "${avdName}" exited (code ${code ?? 'null'}) during startup.` +
+            (tail ? `\n${tail}` : ''),
+        ),
+      );
+    };
+    const onError = (err: Error): void => {
+      done();
+      reject(err);
+    };
+    const timer = setTimeout(() => {
+      done();
+      child.stdout?.off('data', accumulate);
+      child.stderr?.off('data', accumulate);
+      child.stdout?.resume(); // keep draining without buffering
+      child.stderr?.resume();
+      child.unref();
+      resolve();
+    }, 4000);
+    child.once('exit', onExit);
+    child.once('error', onError);
+  });
 }
 
 export async function stopAndroidEmulator(serial: string): Promise<void> {
