@@ -19,6 +19,9 @@
   "bin": {
     "taqwright": "dist/bin/index.js"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "files": [
     "dist",
     "README.md",

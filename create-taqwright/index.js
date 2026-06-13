@@ -17,7 +17,7 @@ try {
   // `./package.json`), so resolve the exported entry, then walk up to the
   // package root to read its `bin`. Reading package.json off disk (vs.
   // resolving it as a specifier) is not gated by `exports`.
-  const mainEntry = require.resolve('taqwright');
+  const mainEntry = require.resolve('@taqwright/taqwright');
   let pkgRoot = dirname(mainEntry);
   while (pkgRoot !== dirname(pkgRoot) && !existsSync(join(pkgRoot, 'package.json'))) {
     pkgRoot = dirname(pkgRoot);
@@ -28,7 +28,7 @@ try {
 } catch {
   console.error(
     'create-taqwright: could not locate the `taqwright` package.\n' +
-      'Try instead:  npm i -D taqwright && npx taqwright init',
+      'Try instead:  npm i -D @taqwright/taqwright && npx taqwright init',
   );
   process.exit(1);
 }

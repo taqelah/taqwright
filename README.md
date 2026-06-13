@@ -34,27 +34,21 @@ test('User can login', async ({ mobile }) => {
 
 ## Install
 
-taqwright is installed straight from its Git repo:
+taqwright is published on npm:
 
 ```bash
-npm install --save-dev git+ssh://git@github.com/taqelah/taqwright.git
-```
-
-Pin a released tag for reproducible installs:
-
-```bash
-npm install --save-dev git+ssh://git@github.com/taqelah/taqwright.git#v0.0.1
+npm install --save-dev @taqwright/taqwright
 ```
 
 In `package.json` it looks like:
 
 ```json
 "devDependencies": {
-  "@taqwright/taqwright": "git+ssh://git@github.com/taqelah/taqwright.git"
+  "@taqwright/taqwright": "^0.0.24"
 }
 ```
 
-npm clones the repo and builds it on install (a `prepare` script runs `npm run build`, since the compiled `dist/` isn't committed). You need read access to the repo and an SSH key on your GitHub account (`ssh -T git@github.com` should greet you). The package imports as `@taqwright/taqwright` and the CLI command is `taqwright`.
+The package imports as `@taqwright/taqwright` and the CLI command is `taqwright`.
 
 ## Quick start
 
