@@ -328,26 +328,36 @@ export async function startAndroidEmulator(avdName: string): Promise<void> {
 }
 
 /**
- * Windows-only, best-effort: poll for the emulator's top-level window and
- * `ShowWindow(SW_MAXIMIZE)` it (the Qt window has no remembered size flag we can
- * pass at launch). Runs a detached, console-hidden PowerShell helper so it never
- * touches the boot flow; swallows all errors. The Qt window may ignore it.
+ * Windows-only, best-effort: keep nudging the emulator's top-level window to
+ * maximized until it sticks (the Qt window has no remembered size flag we can
+ * pass at launch, AND the emulator restores its own saved geometry *after* boot
+ * — so a single maximize gets reverted). Runs a detached, console-hidden
+ * PowerShell helper so it never touches the boot flow; swallows all errors. The
+ * Qt window may still ignore it.
  */
 function maximizeEmulatorWindowWindows(): void {
-  // Poll up to ~30s for a process whose main window is the Android Emulator and
-  // maximize it. SW_MAXIMIZE = 3. Passed via -EncodedCommand (base64 UTF-16LE) to
-  // sidestep all shell quoting.
+  // Loop up to ~60s: whenever the Android Emulator window exists and is NOT
+  // maximized, SW_MAXIMIZE it (= 3); this re-asserts after the emulator's
+  // post-boot geometry restore. Stop once it has stayed maximized ~3 ticks so we
+  // don't fight a user who later resizes. Passed via -EncodedCommand (base64
+  // UTF-16LE) to sidestep all shell quoting.
   const ps = [
     'Add-Type @"',
     'using System;using System.Runtime.InteropServices;',
     'public class TwWin{',
     '[DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h,int n);',
-    '[DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);}',
+    '[DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);',
+    '[DllImport("user32.dll")] public static extern bool IsZoomed(IntPtr h);}',
     '"@',
-    '$deadline=(Get-Date).AddSeconds(30)',
+    '$deadline=(Get-Date).AddSeconds(60)',
+    '$stable=0',
     'while((Get-Date) -lt $deadline){',
     '  $p=Get-Process | Where-Object {$_.MainWindowTitle -like "*Android Emulator*" -and $_.MainWindowHandle -ne 0} | Select-Object -First 1',
-    '  if($p){ [TwWin]::ShowWindow($p.MainWindowHandle,3) | Out-Null; [TwWin]::SetForegroundWindow($p.MainWindowHandle) | Out-Null; break }',
+    '  if($p){',
+    '    $h=$p.MainWindowHandle',
+    '    if([TwWin]::IsZoomed($h)){ $stable++; if($stable -ge 3){ break } }',
+    '    else { [TwWin]::ShowWindow($h,3) | Out-Null; [TwWin]::SetForegroundWindow($h) | Out-Null; $stable=0 }',
+    '  }',
     '  Start-Sleep -Milliseconds 1000',
     '}',
   ].join('\n');
