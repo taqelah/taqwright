@@ -822,6 +822,161 @@ export const INSPECTOR_HTML = `<!doctype html>
   ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 5px;
     border: 2px solid var(--bg); }
   ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+  /* ─── Guided tour (spotlight coach-marks) ─────────────────── */
+  #tour-overlay { position: fixed; inset: 0; z-index: 1000; display: none; }
+  #tour-overlay.show { display: block; }
+  /* Click-catcher so the tour is modal — the app stays put behind the dimmer. */
+  #tour-catcher { position: absolute; inset: 0; }
+  #tour-spotlight { position: absolute; border-radius: 8px; pointer-events: none;
+    box-shadow: 0 0 0 9999px rgba(8,12,20,0.55), 0 0 0 2px var(--accent),
+      0 0 0 6px rgba(31,111,235,0.35); transition: all 0.18s ease; }
+  #tour-pop { position: absolute; width: 320px; max-width: calc(100vw - 24px);
+    background: var(--panel); color: var(--text); border: 1px solid var(--border-strong);
+    border-radius: 10px; box-shadow: 0 12px 40px rgba(0,0,0,0.35); padding: 14px 16px;
+    font-size: 13px; line-height: 1.5; }
+  #tour-pop h3 { margin: 0 0 6px; font-size: 14px; }
+  #tour-pop .tour-body { color: var(--text-dim); }
+  #tour-pop .tour-body b { color: var(--text); }
+  #tour-foot { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+  #tour-progress { font-size: 11px; color: var(--text-muted); font-family: var(--mono); }
+  #tour-foot .grow { flex: 1; }
+  #tour-skip { position: absolute; top: 8px; right: 10px; background: none; border: none;
+    color: var(--text-muted); cursor: pointer; font-size: 16px; line-height: 1; padding: 2px; }
+  #tour-skip:hover { color: var(--text); }
+  /* ─── Help reference panel ────────────────────────────────── */
+  #help-overlay { position: fixed; inset: 0; z-index: 1100; display: none;
+    background: rgba(8,12,20,0.5); }
+  #help-overlay.show { display: flex; align-items: center; justify-content: center; }
+  #help-panel { width: 720px; max-width: calc(100vw - 32px); max-height: calc(100vh - 64px);
+    overflow: auto; background: var(--panel); border: 1px solid var(--border-strong);
+    border-radius: 12px; box-shadow: 0 18px 60px rgba(0,0,0,0.4); padding: 20px 22px; }
+  #help-panel .help-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+  #help-panel .help-head h2 { margin: 0; font-size: 17px; }
+  #help-panel .help-head .grow { flex: 1; }
+  #help-panel .help-lead { color: var(--text-dim); font-size: 13px; margin: 0 0 14px; }
+  #help-close { background: none; border: none; color: var(--text-muted); cursor: pointer;
+    font-size: 20px; line-height: 1; padding: 2px 6px; }
+  #help-close:hover { color: var(--text); }
+  #help-panel details { border: 1px solid var(--border); border-radius: 8px;
+    margin-bottom: 8px; background: var(--panel-2); overflow: hidden; }
+  #help-panel summary { cursor: pointer; padding: 10px 12px; font-weight: 600; font-size: 13px;
+    list-style: none; user-select: none; }
+  #help-panel summary::-webkit-details-marker { display: none; }
+  #help-panel summary::before { content: "▸ "; color: var(--text-muted); }
+  #help-panel details[open] summary::before { content: "▾ "; }
+  #help-panel .help-sec { padding: 0 14px 12px 26px; color: var(--text-dim); font-size: 13px;
+    line-height: 1.6; }
+  #help-panel .help-sec b { color: var(--text); }
+  #help-panel .help-sec code { font-family: var(--mono); font-size: 12px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 4px;
+    padding: 0 4px; }
+  #help-panel .help-sec ul,
+  #help-panel .help-sec ol { margin: 4px 0; padding-left: 18px; }
+  #help-panel .help-sec li { margin: 3px 0; }
+  /* ─── Screen "how to use" hint ────────────────────────────── */
+  .screen-help-btn { font-size: 11px; color: var(--text-dim); cursor: pointer;
+    border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px;
+    background: var(--panel-2); white-space: nowrap; }
+  .screen-help-btn:hover { color: var(--text); border-color: var(--accent); }
+  #screen-wrap { position: relative; }
+  .screen-help-pop { display: none; position: absolute; top: 10px; left: 50%;
+    transform: translateX(-50%); z-index: 20; width: 340px; max-width: calc(100% - 20px);
+    background: var(--panel); color: var(--text); border: 1px solid var(--border-strong);
+    border-radius: 10px; box-shadow: 0 10px 32px rgba(0,0,0,0.32); padding: 12px 14px;
+    font-size: 12.5px; line-height: 1.5; }
+  .screen-help-pop.show { display: block; }
+  .screen-help-title { font-weight: 700; font-size: 13px; margin-bottom: 6px; }
+  .screen-help-pop ul { margin: 0 0 10px; padding-left: 18px; color: var(--text-dim); }
+  .screen-help-pop ul b { color: var(--text); }
+  .screen-help-pop li { margin: 3px 0; }
+  .screen-help-x { position: absolute; top: 6px; right: 8px; background: none; border: none;
+    color: var(--text-muted); cursor: pointer; font-size: 16px; line-height: 1; padding: 2px; }
+  .screen-help-x:hover { color: var(--text); }
+  .screen-help-ok { padding: 4px 12px; }
+  /* ─── Demo stage (illustrated inspector for the tour) ─────── */
+  #demo-stage { display: none; position: fixed; inset: 0; z-index: 900;
+    background: var(--bg); flex-direction: column; padding: 12px 16px 16px; }
+  #demo-stage.show { display: flex; }
+  .demo-bar { display: flex; align-items: center; gap: 10px; padding: 4px 2px 12px; }
+  .demo-badge { font-size: 10px; font-weight: 800; letter-spacing: 0.06em; color: white;
+    background: var(--accent); border-radius: 4px; padding: 2px 6px; }
+  .demo-bar-title { font-size: 13px; color: var(--text-dim); }
+  .demo-bar .grow { flex: 1; }
+  .demo-panes { flex: 1; display: grid; grid-template-columns: 1fr 1.1fr 1.2fr; gap: 12px;
+    min-height: 0; }
+  .demo-pane { display: flex; flex-direction: column; min-height: 0;
+    border: 1px solid var(--border); border-radius: 10px; overflow: hidden; background: var(--panel); }
+  .demo-pane .pane-body { flex: 1; overflow: auto; padding: 8px 10px; }
+  .demo-seg { display: inline-flex; gap: 2px; background: var(--panel-2); border-radius: 6px;
+    padding: 2px; font-size: 11px; }
+  .demo-seg span { padding: 1px 8px; border-radius: 4px; color: var(--text-dim); }
+  .demo-seg span.on { background: var(--panel); color: var(--text); font-weight: 600; }
+  .demo-seg.sm { font-size: 10.5px; width: 100%; }
+  .demo-seg.sm .grow { flex: 1; }
+  .demo-search { font-size: 11px; color: var(--text-muted); border: 1px solid var(--border);
+    border-radius: 6px; padding: 2px 8px; background: var(--panel-2); }
+  .demo-meta { font-size: 11px; color: var(--text-muted); font-family: var(--mono); }
+  .demo-tree { list-style: none; margin: 0; padding: 0; font-family: var(--mono); font-size: 12px;
+    color: var(--text-dim); }
+  .demo-tree li { padding: 2px 4px; border-radius: 4px; white-space: nowrap; }
+  .demo-tree li.i1 { padding-left: 16px; }
+  .demo-tree li.i2 { padding-left: 30px; }
+  .demo-tree li.sel { background: rgba(31,111,235,0.14); color: var(--text); }
+  .demo-id { color: #6639ba; }
+  .demo-q { color: var(--success); }
+  .demo-screen-body { display: flex; align-items: flex-start; justify-content: center; }
+  .demo-phone { width: 220px; border: 8px solid #111723; border-radius: 26px; overflow: hidden;
+    background: #fbf1ee; box-shadow: 0 8px 24px rgba(0,0,0,0.25); }
+  .demo-statusbar { display: flex; justify-content: space-between; font-size: 9px; color: #3a3a3a;
+    padding: 4px 12px; background: #fbf1ee; }
+  .demo-app { padding: 22px 18px 22px; display: flex; flex-direction: column; align-items: center;
+    gap: 10px; background: #fbf1ee; min-height: 340px; }
+  .demo-app-logo { width: 56px; height: 56px; border-radius: 14px; background: #f5333b;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0;
+    margin-top: 6px; }
+  .demo-logo-glass { font-size: 20px; line-height: 1; }
+  .demo-logo-name { font-size: 9px; font-weight: 800; color: #fff; }
+  .demo-app-title { font-size: 19px; font-weight: 800; color: #1b1320; margin: 2px 0 0; }
+  .demo-app-sub { font-size: 11px; color: #9b8f93; margin-bottom: 6px; }
+  .demo-field { width: 100%; height: 36px; border: 1px solid #e3d7d6; border-radius: 10px;
+    background: #fdf8f7; display: flex; align-items: center; gap: 8px; padding: 0 10px; }
+  .demo-field.sel { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(31,111,235,0.30); }
+  .demo-field-ico { font-size: 13px; opacity: 0.7; }
+  .demo-field-ph { font-size: 12px; color: #9b8f93; }
+  .demo-field-eye { margin-left: auto; font-size: 12px; opacity: 0.55; }
+  .demo-app-btn { width: 100%; height: 40px; border: none; border-radius: 10px; color: #fff;
+    background: #a0185a; font-size: 14px; font-weight: 700; margin-top: 6px; }
+  .demo-creds { width: 100%; margin-top: 8px; padding: 10px 12px; border-radius: 12px;
+    background: #f6e7ea; text-align: center; font-size: 10.5px; color: #5a4a4f; line-height: 1.5; }
+  .demo-creds-title { font-weight: 800; color: #a0185a; margin-bottom: 2px; font-size: 11px; }
+  .demo-tabwrap { flex: 1; overflow: auto; padding: 10px 12px; }
+  .demo-tabpane.hidden { display: none; }
+  .demo-rec-banner { font-size: 12px; color: var(--text-dim); display: flex; align-items: center;
+    gap: 6px; margin-bottom: 10px; }
+  .demo-rec-banner b { color: var(--text); }
+  .demo-led { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); }
+  .demo-rec-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .demo-act { border: 1px solid var(--border); border-radius: 7px; padding: 7px 8px; font-size: 12px;
+    color: var(--text-dim); background: var(--panel-2); }
+  .demo-act.primary { grid-column: 1 / -1; border-color: var(--accent); color: var(--text);
+    background: rgba(31,111,235,0.10); font-weight: 600; }
+  .demo-subtabs { margin-top: 10px; font-size: 11px; color: var(--text-muted); }
+  .demo-code { font-family: var(--mono); font-size: 11.5px; line-height: 1.5; color: var(--text);
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px;
+    white-space: pre-wrap; margin: 8px 0 0; }
+  .demo-loc-row { display: flex; align-items: center; gap: 8px; padding: 5px 2px; font-size: 12px;
+    border-bottom: 1px solid var(--border); }
+  .demo-loc-row code { font-family: var(--mono); font-size: 11px; color: var(--text-dim);
+    overflow-wrap: anywhere; }
+  .demo-cat { font-size: 10px; font-weight: 700; border: 1px solid var(--border); border-radius: 999px;
+    padding: 1px 7px; color: var(--text-dim); white-space: nowrap; }
+  .demo-cat.id { color: var(--success); border-color: rgba(26,127,55,0.35); background: #dafbe1; }
+  .demo-cat.uiautomator { color: #6639ba; border-color: rgba(102,57,186,0.35); background: #f3e8ff; }
+  .demo-cat.xpath { color: var(--text-muted); }
+  .demo-pick { margin-left: auto; font-size: 10px; color: var(--accent); font-weight: 600; }
+  .demo-attrs { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+  .demo-attrs td { border-bottom: 1px solid var(--border); padding: 4px 6px; vertical-align: top; }
+  .demo-attrs td:first-child { color: var(--text-muted); font-family: var(--mono); width: 38%; }
 </style>
 </head>
 <body class="view-setup">
@@ -836,6 +991,7 @@ export const INSPECTOR_HTML = `<!doctype html>
     <span class="header-ad-text">In-sprint mobile UI automation, on autopilot.</span>
     <span class="header-ad-arrow" aria-hidden="true">↗</span>
   </a>
+  <button class="icon" id="btn-help" title="Help &amp; guided tour">? Help</button>
   <button class="icon danger inspector-only" id="btn-disconnect" title="End the WebDriver session and return to setup">Disconnect</button>
   <button class="primary attached-only" id="btn-resume" title="Resume the paused test and close this inspector" style="display:none">Resume ▶</button>
 </header>
@@ -1114,6 +1270,8 @@ export const INSPECTOR_HTML = `<!doctype html>
   <div class="pane">
     <div class="pane-head">
       <span class="pane-title">Screen</span>
+      <span class="screen-help-btn" id="screen-help-btn" role="button" tabindex="0"
+            title="What can I do on the screen?">ⓘ How to use</span>
       <span class="meta" id="screen-meta" style="margin-left:auto"></span>
       <select class="context-select hidden" id="context-select"
               title="Automation context — switch into a WebView to inspect the web DOM"></select>
@@ -1121,6 +1279,18 @@ export const INSPECTOR_HTML = `<!doctype html>
             title="No WebView context detected — click for help">ⓘ No WebView</span>
     </div>
     <div class="pane-body" id="screen-wrap">
+      <div class="screen-help-pop" id="screen-help-pop" role="dialog" aria-label="Using the screen">
+        <button class="screen-help-x" id="screen-help-close" type="button" aria-label="Dismiss">×</button>
+        <div class="screen-help-title">Working on the screen</div>
+        <ul>
+          <li><b>Click any element</b> on the screen to <b>select</b> it — then read its
+            <b>Attributes</b> / <b>Locators</b>, or record an action on it from the <b>Record</b> tab.</li>
+          <li>The blue box highlights the selected element's bounds.</li>
+          <li>Hard to hit something small or overlapping? Pick it from the <b>Hierarchy</b> tree on the left.</li>
+          <li>When recording a <b>tap at coordinates</b> or a <b>drag target</b>, click the exact spot on the screen.</li>
+        </ul>
+        <button class="primary screen-help-ok" id="screen-help-ok2" type="button">Got it</button>
+      </div>
       <div id="screen-host">
         <img id="screen-img" alt="device screen" />
         <div id="highlight" style="display:none"></div>
@@ -1388,6 +1558,304 @@ export const INSPECTOR_HTML = `<!doctype html>
   </div>
 </div>
 <div id="status">ready</div>
+
+<!-- ─── Demo stage (illustrated inspector for the Inspector tour) ─── -->
+<div id="demo-stage" aria-hidden="true">
+  <div class="demo-bar">
+    <span class="demo-badge">DEMO</span>
+    <span class="demo-bar-title">Inspector — example walkthrough (Taqelah demo app)</span>
+    <span class="grow"></span>
+    <button class="icon" id="demo-disconnect" type="button" disabled>Disconnect</button>
+  </div>
+  <div class="demo-panes">
+    <!-- Hierarchy -->
+    <div class="pane demo-pane" id="demo-hier">
+      <div class="pane-head">
+        <span class="pane-title">Hierarchy</span>
+        <div class="demo-seg"><span class="on">Tree</span><span>XML</span></div>
+        <span class="grow"></span>
+        <span class="demo-search">filter by tag, id, text…</span>
+      </div>
+      <div class="pane-body">
+        <ul class="demo-tree">
+          <li>▾ android.widget.FrameLayout</li>
+          <li class="i1">▾ android.view.View</li>
+          <li class="i2 sel">android.widget.EditText <span class="demo-q">hint="Username"</span></li>
+          <li class="i2">android.widget.EditText <span class="demo-q">hint="Password"</span></li>
+          <li class="i2">android.view.View <span class="demo-id">desc="Login"</span></li>
+        </ul>
+      </div>
+    </div>
+    <!-- Screen (demo login phone) -->
+    <div class="pane demo-pane" id="demo-screen">
+      <div class="pane-head">
+        <span class="pane-title">Screen</span>
+        <span class="grow"></span>
+        <span class="demo-meta">1080 × 2340</span>
+      </div>
+      <div class="pane-body demo-screen-body">
+        <div class="demo-phone">
+          <div class="demo-statusbar"><span>1:11</span><span>▾ ▮ ▶</span></div>
+          <div class="demo-app">
+            <div class="demo-app-logo"><span class="demo-logo-glass">🍹</span><span class="demo-logo-name">taqelah!</span></div>
+            <div class="demo-app-title">DemoApp</div>
+            <div class="demo-app-sub">Sign in to shop the latest styles</div>
+            <div class="demo-field sel"><span class="demo-field-ico">👤</span><span class="demo-field-ph">Username</span></div>
+            <div class="demo-field"><span class="demo-field-ico">🔒</span><span class="demo-field-ph">Password</span><span class="demo-field-eye">👁</span></div>
+            <button class="demo-app-btn" type="button">Login</button>
+            <div class="demo-creds">
+              <div class="demo-creds-title">Demo Credentials</div>
+              <div>Username: emma@demoapp.com</div>
+              <div>Password: 10203040</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- Inspector tabs -->
+    <div class="pane demo-pane" id="demo-tabs">
+      <div class="tabs" role="tablist">
+        <div class="tab active" data-demo-tab="rec">Record</div>
+        <div class="tab" data-demo-tab="script">Recorded script</div>
+        <div class="tab" data-demo-tab="loc">Locators</div>
+        <div class="tab" data-demo-tab="attrs">Attributes</div>
+      </div>
+      <div class="demo-tabwrap">
+        <div class="demo-tabpane" id="demo-rec">
+          <div class="demo-rec-banner"><span class="demo-led"></span>Recording — selected: <b>Username field</b></div>
+          <div class="demo-rec-grid">
+            <span class="demo-act primary">▶ Click</span>
+            <span class="demo-act">⌨ Type</span>
+            <span class="demo-act">⌫ Clear</span>
+            <span class="demo-act">⏱ Long press</span>
+            <span class="demo-act">↕ Scroll to</span>
+            <span class="demo-act">✓ Assert visible</span>
+          </div>
+          <div class="demo-subtabs">Actions · Screen · Assertions</div>
+        </div>
+        <div class="demo-tabpane hidden" id="demo-script">
+          <div class="demo-seg sm"><span class="on">Taqwright</span><span>Python</span><span>Java</span>
+            <span class="grow"></span><span>⎘ Copy</span><span>↓ Export</span></div>
+          <pre class="demo-code">await mobile.getByXpath("//*[@hint='Username']").fill('emma@demoapp.com');
+await mobile.getByXpath("//*[@hint='Password']").fill('10203040');
+await mobile.getByUiSelector('new UiSelector().description("Login")').click();</pre>
+        </div>
+        <div class="demo-tabpane hidden" id="demo-loc">
+          <div class="demo-loc-row"><span class="demo-cat xpath">xpath</span><code>//android.widget.EditText[@hint="Username"]</code><span class="demo-pick">recommended</span></div>
+          <div class="demo-loc-row"><span class="demo-cat uiautomator">UIAutomator</span><code>new UiSelector().className("android.widget.EditText").instance(0)</code></div>
+          <div class="demo-loc-row"><span class="demo-cat xpath">xpath</span><code>(//android.widget.EditText)[1]</code></div>
+        </div>
+        <div class="demo-tabpane hidden" id="demo-attrs">
+          <table class="demo-attrs">
+            <tr><td>class</td><td>android.widget.EditText</td></tr>
+            <tr><td>hint</td><td>Username</td></tr>
+            <tr><td>text</td><td></td></tr>
+            <tr><td>content-desc</td><td></td></tr>
+            <tr><td>resource-id</td><td></td></tr>
+            <tr><td>bounds</td><td>[72,560][1008,696]</td></tr>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Guided tour (spotlight) ─────────────────────────────── -->
+<div id="tour-overlay" aria-hidden="true">
+  <div id="tour-catcher"></div>
+  <div id="tour-spotlight"></div>
+  <div id="tour-pop" role="dialog" aria-modal="true" aria-labelledby="tour-title">
+    <button id="tour-skip" type="button" aria-label="Skip tour" title="Skip">×</button>
+    <h3 id="tour-title"></h3>
+    <div class="tour-body" id="tour-text"></div>
+    <div id="tour-foot">
+      <span id="tour-progress"></span>
+      <span class="grow"></span>
+      <button class="icon" id="tour-back" type="button">← Back</button>
+      <button class="primary" id="tour-next" type="button">Next →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Help reference panel ────────────────────────────────── -->
+<div id="help-overlay" role="dialog" aria-modal="true" aria-labelledby="help-title">
+  <div id="help-panel">
+    <div class="help-head">
+      <h2 id="help-title">taqwright codegen — Help</h2>
+      <span class="grow"></span>
+      <button class="primary" id="help-tour-setup" type="button" title="Guided tour of the setup wizard">▶ Setup tour</button>
+      <button class="icon" id="help-tour-inspector" type="button" title="Preview the inspector / device-screen tour (no device needed)">▶ Inspector tour</button>
+      <button id="help-close" type="button" aria-label="Close help">×</button>
+    </div>
+    <p class="help-lead">codegen lets you drive a real device, inspect its UI, record your actions
+      as you go, and export a runnable test. Take the <b>Setup tour</b> or preview the
+      <b>Inspector tour</b> (the device-screen view — works even before you connect), or read the
+      topics below.</p>
+
+    <details open>
+      <summary>Quick start</summary>
+      <div class="help-sec">
+        <ol>
+          <li><b>Connect</b> a device (the 3-step setup wizard).</li>
+          <li><b>Click an element</b> on the screen (or a node in the Hierarchy) to select it.</li>
+          <li>Press <b>Start record</b>, then pick actions / assertions for the selected element.</li>
+          <li>Open <b>Recorded script</b> and <b>Export</b> it into your project.</li>
+        </ol>
+      </div>
+    </details>
+
+    <details open>
+      <summary>1 · Connecting to a device</summary>
+      <div class="help-sec">
+        Choose <b>Local</b> (an emulator / simulator or USB device on this machine) or <b>Cloud</b>
+        (BrowserStack / LambdaTest) at the top, then walk the 3-step wizard:
+        <ul>
+          <li><b>Step 1 — Prerequisites:</b> the <b>Environment</b> card runs a health check
+            (<code>adb</code>, JDK, Android SDK, Appium drivers — expand it for details); the
+            <b>Appium server</b> card lets you <b>Start</b> / Restart / Recheck a local Appium.
+            <b>Next</b> unlocks once Appium is green. Cloud mode shows a credentials card instead.</li>
+          <li><b>Step 2 — Pick a device:</b> switch the <b>Android / iOS</b> tabs,
+            <code>↻ Refresh</code> the list, and <b>Start</b> a shutdown emulator (or select a
+            running one / a cloud device).</li>
+          <li><b>Step 3 — App &amp; capabilities:</b> point at the app under test with
+            <b>Browse…</b>, tweak or <b>+ Add</b> Appium capabilities (<b>↺ Reset</b> restores the
+            config defaults), then <b>Connect →</b>.</li>
+        </ul>
+      </div>
+    </details>
+
+    <details>
+      <summary>2 · The window layout</summary>
+      <div class="help-sec">
+        Once connected you get three panes:
+        <ul>
+          <li><b>Hierarchy</b> (left) — the UI element tree.</li>
+          <li><b>Screen</b> (center) — a live mirror of the device.</li>
+          <li><b>Inspector</b> (right) — four tabs: <b>Record</b>, <b>Recorded script</b>,
+            <b>Locators</b>, <b>Attributes</b>.</li>
+        </ul>
+        Selecting an element anywhere drives all of these at once.
+      </div>
+    </details>
+
+    <details>
+      <summary>3 · Hierarchy — Tree &amp; XML</summary>
+      <div class="help-sec">
+        <ul>
+          <li>Toggle <b>Tree</b> (collapsible element tree) or raw <b>XML</b> page source.</li>
+          <li><b>Filter</b> with the search box — matches by tag, id, or text.</li>
+          <li><b>Click a node</b> to select it: it highlights on the screen and populates the
+            Locators / Attributes tabs.</li>
+          <li>Use the tree to reach <b>small or overlapping</b> elements that are hard to click on
+            the screen.</li>
+        </ul>
+      </div>
+    </details>
+
+    <details>
+      <summary>4 · Screen mirror &amp; WebView</summary>
+      <div class="help-sec">
+        <ul>
+          <li><b>Click any element</b> on the live screen to <b>select</b> it (the blue box shows
+            its bounds). The mirror is for selecting / inspecting — actions are recorded from the
+            Record tab.</li>
+          <li>When recording a <b>tap at coordinates</b> or a <b>drag target</b>, click the exact
+            spot on the screen.</li>
+          <li><b>WebView:</b> if the app has a WebView, the context dropdown above the screen lets
+            you switch into it to inspect the web DOM.</li>
+        </ul>
+      </div>
+    </details>
+
+    <details>
+      <summary>5 · Recording — Actions</summary>
+      <div class="help-sec">
+        Press <b>Start record</b>, select an element, then choose an action; each is appended to
+        the script live.
+        <ul>
+          <li><b>Element:</b> Click, Double tap, Long press, Check / Uncheck, Focus / Blur, Type,
+            Clear, Type slowly, Press (a key), Select (a dropdown value).</li>
+          <li><b>Gestures:</b> Swipe ← → ↑ ↓, Pinch in / out, Scroll to (scroll the element into
+            view), Drag to target (drag the element onto a point you click).</li>
+        </ul>
+        The <b>Actions / Screen / Assertions</b> sub-tabs switch what the palette records.
+      </div>
+    </details>
+
+    <details>
+      <summary>6 · Recording — Screen taps</summary>
+      <div class="help-sec">
+        The <b>Screen</b> sub-tab records raw interactions <b>at coordinates</b> — no element
+        selection needed. Useful for canvases, maps, games, or anything the hierarchy doesn't
+        expose as a tappable element.
+      </div>
+    </details>
+
+    <details>
+      <summary>7 · Recording — Assertions</summary>
+      <div class="help-sec">
+        The <b>Assertions</b> sub-tab records checks that verify state on the selected element:
+        <ul>
+          <li><b>State:</b> Visible, Hidden, Enabled, Disabled, Checked, Unchecked, Editable,
+            Readonly, Focused, Attached, Empty, In viewport.</li>
+          <li><b>Text:</b> Equals (exact) or Contains.</li>
+          <li><b>Value</b>, <b>Count</b> (how many match), and <b>Attribute</b> (assert a specific
+            attribute value).</li>
+        </ul>
+        Assertions are how your exported test catches regressions.
+      </div>
+    </details>
+
+    <details>
+      <summary>8 · Locators</summary>
+      <div class="help-sec">
+        With an element selected, the <b>Locators</b> tab lists <b>ranked, uniqueness-verified</b>
+        candidates per strategy:
+        <ul>
+          <li><b>id</b> and <b>accessibility id</b> (most stable).</li>
+          <li><b>UIAutomator</b> (Android), <b>NSPredicate</b> / <b>Class Chain</b> (iOS).</li>
+          <li><b>xpath</b> (fallback).</li>
+        </ul>
+        A <b>Recommended</b> pick is floated to the top. Click any candidate to copy it.
+      </div>
+    </details>
+
+    <details>
+      <summary>9 · Attributes</summary>
+      <div class="help-sec">
+        The <b>Attributes</b> tab shows the selected element's full attribute set (resource-id,
+        text, content-desc / name, bounds, class, …) plus its xpath — handy for crafting your own
+        locators.
+      </div>
+    </details>
+
+    <details>
+      <summary>10 · The recorded script &amp; export</summary>
+      <div class="help-sec">
+        The <b>Recorded script</b> tab renders your test in three languages:
+        <ul>
+          <li><b>Taqwright</b> — a complete, runnable test.</li>
+          <li><b>Python</b> / <b>Java</b> — the steps only (paste into your own Appium test;
+            driver / setup not included).</li>
+        </ul>
+        Use <code>⎘ Copy</code>, <code>↓ Export</code> (saves into your project's tests folder), or
+        <b>Clear</b> to start over.
+      </div>
+    </details>
+
+    <details>
+      <summary>Tips &amp; shortcuts</summary>
+      <div class="help-sec">
+        <ul>
+          <li>Re-open this help any time with <b>? Help</b> in the header.</li>
+          <li>During the tour: <b>→ / ←</b> next / back, <b>Esc</b> to skip.</li>
+          <li>The Screen pane's <b>ⓘ How to use</b> explains on-screen interactions.</li>
+          <li><b>Disconnect</b> ends the session and returns you to setup.</li>
+        </ul>
+      </div>
+    </details>
+  </div>
+</div>
 <script>
 (() => {
   'use strict';
@@ -3435,9 +3903,11 @@ export const INSPECTOR_HTML = `<!doctype html>
         await fetchSnapshot();
         startAutoRefresh();
         hideLoader();
+        onInspectorReady();
       } else {
         showView('setup');
         await initSetup(j);
+        maybeStartSetupTour();
       }
       setStatus('idle');
     } catch (err) {
@@ -4678,6 +5148,7 @@ export const INSPECTOR_HTML = `<!doctype html>
       await fetchSnapshot();
       startAutoRefresh();
       hideLoader();
+      onInspectorReady();
     } catch (e) {
       hideLoader();
       // User-initiated cancel — return to setup quietly, no error toast.
@@ -4713,6 +5184,326 @@ export const INSPECTOR_HTML = `<!doctype html>
     await bootstrap();
   };
 
+  // ─── Guided tour + Help panel ─────────────────────────────────
+  // Spotlight coach-marks over the real controls + a static Help reference.
+  // (No backticks anywhere in this block — the whole file is a template literal.)
+  // Click a real inspector tab (used by the live inspector tour).
+  function tourClickTab(name) {
+    const t = document.querySelector('.tab[data-tab="' + name + '"]');
+    if (t) t.click();
+  }
+  // Switch the demo stage's mock right-hand tab (Record / Script / Locators / Attributes).
+  function showDemoTab(name) {
+    ['rec', 'script', 'loc', 'attrs'].forEach((k) => {
+      const pane = $('demo-' + k);
+      if (pane) pane.classList.toggle('hidden', k !== name);
+    });
+    document.querySelectorAll('#demo-tabs .tab').forEach((t) => {
+      t.classList.toggle('active', t.getAttribute('data-demo-tab') === name);
+    });
+  }
+  const SETUP_TOUR = [
+    { sel: null, title: 'Welcome to codegen',
+      body: 'This quick tour shows how to <b>connect a device</b>, <b>record</b> your actions, and <b>export</b> a runnable test.<br>Use Next / Back or the ← → keys; press Esc to skip.' },
+    { sel: '.conn-mode-toggle', title: 'Local or cloud',
+      body: 'Choose <b>Local</b> for an emulator / simulator or USB device on this machine, or <b>Cloud</b> for BrowserStack / LambdaTest.' },
+    { sel: '.card-env', before: function () { goToStep(1); }, title: 'Step 1 — Prerequisites',
+      body: 'The <b>Environment</b> card runs a health check (adb, JDK, Android SDK, Appium drivers). Expand it to see any warnings.' },
+    { sel: '.card-appium', before: function () { goToStep(1); }, title: 'Appium server',
+      body: 'codegen talks to a local <b>Appium</b> server. If the pill is grey, click <b>Start Appium</b>; Next unlocks once it is green. (Cloud mode shows credentials here instead.)' },
+    { sel: '#btn-devices-refresh', before: function () { goToStep(2); }, title: 'Step 2 — Pick a device',
+      body: 'Switch the <b>Android / iOS</b> tabs and <b>↻ Refresh</b> the list. <b>Start</b> a shutdown emulator, or pick a running one / a cloud device.' },
+    { sel: '#btn-app-browse', before: function () { goToStep(3); }, title: 'Step 3 — App & capabilities',
+      body: 'Point at the app under test with <b>Browse…</b>, then tweak or <b>+ Add</b> Appium capabilities (<b>↺ Reset</b> restores config defaults).' },
+    { sel: '#btn-connect', before: function () { goToStep(3); }, title: 'Connect',
+      body: 'Hit <b>Connect →</b> to open the session and enter the inspector.' },
+    { sel: null, title: 'You are set',
+      body: 'Connect to start inspecting and recording. You can reopen this tour any time with <b>? Help</b> in the header.' },
+  ];
+  // LIVE inspector tour — spotlights the REAL panes (used when connected).
+  const INSPECTOR_TOUR_LIVE = [
+    { sel: null, title: 'The inspector',
+      body: 'You are connected. This is where you inspect the UI, drive the device, and record a test.' },
+    { sel: '.hier-mode-toggle', title: 'Hierarchy',
+      body: 'Browse the UI tree as <b>Tree</b> or raw <b>XML</b>, and filter with the search box. Clicking a node selects it and highlights it on the screen — handy for small or overlapping elements.' },
+    { sel: '#screen-host', title: 'Live screen',
+      body: 'A live mirror of the device. <b>Click any element</b> to <b>select</b> it — then inspect its Attributes / Locators or record an action on it. (See the <b>ⓘ How to use</b> button above for more.)' },
+    { sel: '.tabs', title: 'The four panels',
+      body: '<b>Record</b> (capture actions), <b>Recorded script</b> (your test), <b>Locators</b> (ranked selectors), and <b>Attributes</b> for the selected element.' },
+    { sel: '#btn-rec-toggle', before: function () { tourClickTab('record'); }, title: 'Record',
+      body: 'Press <b>Start record</b>, select an element, then choose an action — Click, Type, Clear, gestures… The <b>Actions / Screen / Assertions</b> sub-tabs switch what you capture. Each step is appended live.' },
+    { sel: '#tab-script', before: function () { tourClickTab('script'); }, title: 'Recorded script',
+      body: 'Your test in <b>Taqwright</b> (runnable), or <b>Python</b> / <b>Java</b> (steps only). Use <b>⎘ Copy</b>, <b>↓ Export</b> (saves into your tests folder), or Clear.' },
+    { sel: '#tab-locators', before: function () { tourClickTab('locators'); }, title: 'Locators',
+      body: 'Ranked, uniqueness-verified selectors for the selected element — id, accessibility id, UIAutomator / NSPredicate / Class Chain, xpath. The <b>recommended</b> pick is on top; click any to copy.' },
+    { sel: '#tab-attrs', before: function () { tourClickTab('attrs'); }, title: 'Attributes',
+      body: 'The selected element\\'s full attribute set (resource-id, class, text, content-desc, bounds…) plus its xpath.' },
+    { sel: '#btn-disconnect', before: function () { tourClickTab('record'); }, title: 'Done',
+      body: 'When finished, <b>Disconnect</b> ends the session and returns to setup. Reopen this tour any time with <b>? Help</b>.' },
+  ];
+  // DEMO inspector tour — targets the mock #demo-stage (a Taqelah-demo login
+  // screen) so the walkthrough has a realistic device to point at when NOT connected.
+  const INSPECTOR_TOUR_DEMO = [
+    { sel: null, title: 'The inspector (example)',
+      body: 'This is a <b>demo</b> of the inspector using the Taqelah sample login screen — so you can see the layout before connecting a real device.' },
+    { sel: '#demo-hier', before: function () { showDemoTab('rec'); }, title: 'Hierarchy',
+      body: 'The UI element tree (this is a Jetpack Compose app, so nodes are <b>EditText</b> / <b>android.view.View</b>). Toggle <b>Tree</b> / raw <b>XML</b> and filter with the search box. Clicking a node selects it and highlights it on the screen.' },
+    { sel: '#demo-screen', title: 'Live screen',
+      body: 'A live mirror of the device — the Taqelah demo login. <b>Click any element</b> (here the <b>Username</b> field) to <b>select</b> it, then inspect its Attributes / Locators or record an action on it.' },
+    { sel: '#demo-tabs', title: 'The four panels',
+      body: '<b>Record</b> (capture actions), <b>Recorded script</b> (your test), <b>Locators</b> (ranked selectors), and <b>Attributes</b> for the selected element.' },
+    { sel: '#demo-rec', before: function () { showDemoTab('rec'); }, title: 'Record',
+      body: 'Press Start record, select an element, then choose an action — Click, Type, Clear, Long press, Scroll to, gestures… The <b>Actions / Screen / Assertions</b> sub-tabs switch what you capture. Each step is appended live.' },
+    { sel: '#demo-script', before: function () { showDemoTab('script'); }, title: 'Recorded script',
+      body: 'Your test in <b>Taqwright</b> (runnable), or <b>Python</b> / <b>Java</b> (steps only). Use <b>⎘ Copy</b>, <b>↓ Export</b> (saves into your tests folder), or Clear.' },
+    { sel: '#demo-loc', before: function () { showDemoTab('loc'); }, title: 'Locators',
+      body: 'Ranked, uniqueness-verified selectors for the selected element. This field has <b>no id</b>, so taqwright recommends a <b>hint-based xpath</b> — others (UIAutomator, plain xpath) are offered too. Click any to copy.' },
+    { sel: '#demo-attrs', before: function () { showDemoTab('attrs'); }, title: 'Attributes',
+      body: 'The selected element\\'s full attribute set (resource-id, class, text, content-desc, bounds…) plus its xpath.' },
+    { sel: '#demo-disconnect', before: function () { showDemoTab('rec'); }, title: 'Done',
+      body: 'On a real session, <b>Disconnect</b> ends it and returns to setup. Reopen this walkthrough any time with <b>? Help → Inspector tour</b>.' },
+  ];
+
+  let tourSteps = [];
+  let tourIdx = 0;
+  let tourActive = false;
+  let tourOnDone = null;
+
+  function tourSeen(key) {
+    try {
+      return !!localStorage.getItem(key);
+    } catch {
+      return true; // no storage → behave as already-seen (never nag)
+    }
+  }
+  function markTourSeen(key) {
+    try {
+      localStorage.setItem(key, '1');
+    } catch {
+      /* ignore */
+    }
+  }
+
+  function tourTarget(sel) {
+    if (!sel) return null;
+    const el = document.querySelector(sel);
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    if (r.width === 0 && r.height === 0) return null; // hidden / not laid out
+    return el;
+  }
+
+  function startTour(steps, onDone) {
+    if (tourActive || !steps || !steps.length) return;
+    tourSteps = steps;
+    tourOnDone = onDone || null;
+    tourIdx = 0;
+    tourActive = true;
+    $('tour-overlay').classList.add('show');
+    document.addEventListener('keydown', tourKey, true);
+    window.addEventListener('resize', tourReposition);
+    window.addEventListener('scroll', tourReposition, true);
+    renderTourStep();
+  }
+
+  function endTour() {
+    if (!tourActive) return;
+    tourActive = false;
+    $('tour-overlay').classList.remove('show');
+    document.removeEventListener('keydown', tourKey, true);
+    window.removeEventListener('resize', tourReposition);
+    window.removeEventListener('scroll', tourReposition, true);
+    const cb = tourOnDone;
+    tourOnDone = null;
+    if (cb) cb();
+  }
+
+  function renderTourStep() {
+    const step = tourSteps[tourIdx];
+    if (step.before) {
+      try {
+        step.before();
+      } catch {
+        /* navigation hook is best-effort */
+      }
+    }
+    $('tour-title').textContent = step.title;
+    $('tour-text').innerHTML = step.body;
+    $('tour-progress').textContent = tourIdx + 1 + ' / ' + tourSteps.length;
+    $('tour-back').disabled = tourIdx === 0;
+    $('tour-next').textContent = tourIdx === tourSteps.length - 1 ? 'Done ✓' : 'Next →';
+    const el = tourTarget(step.sel);
+    if (el) el.scrollIntoView({ block: 'center', inline: 'center' });
+    positionTour();
+  }
+
+  function positionTour() {
+    const step = tourSteps[tourIdx];
+    const spot = $('tour-spotlight');
+    const pop = $('tour-pop');
+    const el = tourTarget(step.sel);
+    if (!el) {
+      // No (visible) target — show the popover centered, no spotlight.
+      spot.style.display = 'none';
+      pop.style.transform = 'translate(-50%, -50%)';
+      pop.style.left = '50%';
+      pop.style.top = '50%';
+      return;
+    }
+    const r = el.getBoundingClientRect();
+    const pad = 6;
+    spot.style.display = 'block';
+    spot.style.left = r.left - pad + 'px';
+    spot.style.top = r.top - pad + 'px';
+    spot.style.width = r.width + pad * 2 + 'px';
+    spot.style.height = r.height + pad * 2 + 'px';
+    pop.style.transform = 'none';
+    const popW = pop.offsetWidth || 320;
+    const popH = pop.offsetHeight || 170;
+    const gap = 14;
+    let top = r.bottom + gap;
+    if (top + popH > window.innerHeight - 8) top = Math.max(8, r.top - gap - popH);
+    let left = r.left + r.width / 2 - popW / 2;
+    left = Math.max(8, Math.min(left, window.innerWidth - popW - 8));
+    pop.style.left = left + 'px';
+    pop.style.top = top + 'px';
+  }
+
+  function tourReposition() {
+    if (tourActive) positionTour();
+  }
+  function tourNext() {
+    if (tourIdx >= tourSteps.length - 1) {
+      endTour();
+      return;
+    }
+    tourIdx++;
+    renderTourStep();
+  }
+  function tourBack() {
+    if (tourIdx > 0) {
+      tourIdx--;
+      renderTourStep();
+    }
+  }
+  function tourKey(e) {
+    if (!tourActive) return;
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      endTour();
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      tourNext();
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      tourBack();
+    }
+  }
+
+  function openHelp() {
+    $('help-overlay').classList.add('show');
+    document.addEventListener('keydown', helpKey, true);
+  }
+  function closeHelp() {
+    $('help-overlay').classList.remove('show');
+    document.removeEventListener('keydown', helpKey, true);
+  }
+  function helpKey(e) {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      closeHelp();
+    }
+  }
+
+  // First-run auto-start — called once the relevant page has finished loading
+  // (so the spotlight never lands on a blank/loading area), not on a fixed timer.
+  function maybeStartSetupTour() {
+    if (tourActive || tourSeen('tw_tour_setup_seen')) return;
+    if (!document.body.classList.contains('view-setup')) return;
+    startTour(SETUP_TOUR, () => markTourSeen('tw_tour_setup_seen'));
+  }
+  // Called after the first device snapshot + tree have loaded (loader hidden).
+  // First-timers get the inspector tour; everyone else gets a one-time screen
+  // hint — never both at once.
+  function onInspectorReady() {
+    if (tourActive) return;
+    if (!document.body.classList.contains('view-inspector')) return;
+    if (!tourSeen('tw_tour_inspector_seen')) {
+      startInspectorTour(() => markTourSeen('tw_tour_inspector_seen'));
+    } else if (!tourSeen('tw_screen_hint_seen')) {
+      openScreenHelp();
+      markTourSeen('tw_screen_hint_seen');
+    }
+  }
+
+  // The inspector tour runs against the mock #demo-stage (a Taqelah-demo login
+  // screen) so it always has a realistic device to spotlight, connected or not.
+  function showDemoStage() {
+    const el = $('demo-stage');
+    if (el) el.classList.add('show');
+  }
+  function hideDemoStage() {
+    const el = $('demo-stage');
+    if (el) el.classList.remove('show');
+  }
+  function startInspectorTour(onDone) {
+    if (tourActive) return;
+    // Connected → spotlight the REAL panes. Not connected → illustrate with the
+    // mock demo device so there's still something to point at.
+    if (document.body.classList.contains('view-inspector')) {
+      startTour(INSPECTOR_TOUR_LIVE, onDone);
+      return;
+    }
+    showDemoTab('rec');
+    showDemoStage();
+    startTour(INSPECTOR_TOUR_DEMO, function () {
+      hideDemoStage();
+      if (onDone) onDone();
+    });
+  }
+
+  // ─── Screen "how to use" hint ─────────────────────────────────
+  function openScreenHelp() {
+    const el = $('screen-help-pop');
+    if (el) el.classList.add('show');
+  }
+  function closeScreenHelp() {
+    const el = $('screen-help-pop');
+    if (el) el.classList.remove('show');
+  }
+
+  function initTutorial() {
+    $('btn-help').onclick = openHelp;
+    $('help-close').onclick = closeHelp;
+    $('help-overlay').onclick = (e) => {
+      if (e.target === $('help-overlay')) closeHelp();
+    };
+    $('help-tour-setup').onclick = () => {
+      closeHelp();
+      startTour(SETUP_TOUR);
+    };
+    $('help-tour-inspector').onclick = () => {
+      closeHelp();
+      startInspectorTour();
+    };
+    $('tour-next').onclick = tourNext;
+    $('tour-back').onclick = tourBack;
+    $('tour-skip').onclick = endTour;
+    // Screen-pane help affordance.
+    const shBtn = $('screen-help-btn');
+    if (shBtn)
+      shBtn.onclick = () => {
+        const el = $('screen-help-pop');
+        if (el && el.classList.contains('show')) closeScreenHelp();
+        else openScreenHelp();
+      };
+    const shClose = $('screen-help-close');
+    if (shClose) shClose.onclick = closeScreenHelp;
+    const shOk = $('screen-help-ok2');
+    if (shOk) shOk.onclick = closeScreenHelp;
+  }
+
+  initTutorial();
   bootstrap();
 })();
 </script>
