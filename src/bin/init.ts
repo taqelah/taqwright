@@ -366,12 +366,9 @@ export async function runInit(argDir: string | undefined, opts: InitOptions = {}
       console.error(`\nnpm install exited with code ${code}.`);
       if (!linkedDev) {
         console.error(
-          '\n@taqwright/taqwright installs from git+ssh://git@github.com/taqelah/taqwright.git,',
+          '\n@taqwright/taqwright installs from public npm — a failure here is usually a',
         );
-        console.error(
-          'so a failure here usually means no SSH access to the private taqelah/taqwright repo.',
-        );
-        console.error('Verify your GitHub SSH key with:  ssh -T git@github.com');
+        console.error('network/registry issue. Retry, or check your npm registry settings.');
         console.error('To use a local taqwright build instead:');
         console.error('  cd /path/to/taqwright && npm link');
         console.error(`  cd ${cdHint} && npm install && npm link @taqwright/taqwright`);
@@ -379,7 +376,7 @@ export async function runInit(argDir: string | undefined, opts: InitOptions = {}
       process.exit(code);
     }
 
-    // Link LAST — `npm install` reconciles node_modules against the git+ssh
+    // Link LAST — `npm install` reconciles node_modules against the npm
     // devDependency and would otherwise clobber an earlier symlink.
     if (linkedDev) {
       const linkCode = await runNpm(['link', '@taqwright/taqwright'], targetDir);
@@ -748,10 +745,8 @@ function packageJsonTemplate(name: string): string {
       report: 'taqwright show-report',
     },
     devDependencies: {
-      // Temporary (pre-publish): pull taqwright straight from the private repo
-      // over SSH so `npm install` needs no GitHub Packages registry/token.
-      // Switch to a versioned registry range once @taqwright/taqwright ships.
-      '@taqwright/taqwright': 'git+ssh://git@github.com/taqelah/taqwright.git',
+      // Installed from public npm.
+      '@taqwright/taqwright': 'latest',
       '@types/node': '^24.0.0',
       typescript: '^5.4.0',
     },
@@ -1162,16 +1157,8 @@ playwright-report
 }
 
 function npmrcTemplate(): string {
-  // NOTE: pre-publish, @taqwright/taqwright installs over git+ssh (see the
-  // devDependency in package.json), so NO registry/token is needed right now —
-  // a working GitHub SSH key (`ssh -T git@github.com`) is enough. The lines
-  // below are inert today; they're the auth you'll need once the package ships
-  // to GitHub Packages and the devDependency switches to a versioned range.
-  return `# Active path today: @taqwright/taqwright installs over git+ssh — no token needed.
-# Future (once published to GitHub Packages), uncomment and supply a token:
-# @taqwright:registry=https://npm.pkg.github.com
-#   Auth needs a Personal Access Token with read:packages. Don't commit it —
-#   put it in your user ~/.npmrc or a CI env var, e.g.:
-#   //npm.pkg.github.com/:_authToken=\${NODE_AUTH_TOKEN}
+  // @taqwright/taqwright is published to public npm, so no registry config or
+  // auth token is needed — a plain `npm install` works.
+  return `# @taqwright/taqwright installs from public npm — no registry config or token needed.
 `;
 }
