@@ -74,6 +74,12 @@ jobs:
     # Heavy: `--with-avd` pulls a managed JDK + SDK + system image (~2 GB) and the
     # emulator cold-boots inside the first test.
     timeout-minutes: 45
+    # taqwright never sets ANDROID_AVD_HOME, so avdmanager (create) and Appium's
+    # appium-adb (run) can resolve the default AVD dir differently on the runner.
+    # Pinning it once at the job level flows into BOTH (both spread ...process.env),
+    # so the AVD is created where Appium then looks for it.
+    env:
+      ANDROID_AVD_HOME: ${{ github.workspace }}/.android-avd
 
     steps:
       # Hardware acceleration for the emulator (ubuntu-latest runners expose KVM).
@@ -94,9 +100,19 @@ jobs:
       # `taqwright_api34`, --demo-app downloads DemoApp-v1.0.0.apk + writes the spec.
       - name: Scaffold + provision toolchain & AVD via taqwright
         run: |
+          mkdir -p "$ANDROID_AVD_HOME"
           npx @taqwright/taqwright@latest init proj \
             --platform android --demo-app \
             --install-toolchain --with-avd --no-install -y
+
+      # Fail fast + legibly if the AVD wasn't created where Appium will look,
+      # instead of surfacing later as a confusing Appium "no emulators" error.
+      - name: Verify the AVD was created
+        run: |
+          echo "ANDROID_AVD_HOME=$ANDROID_AVD_HOME"
+          ls -la "$ANDROID_AVD_HOME" || true
+          test -d "$ANDROID_AVD_HOME/taqwright_api34.avd" \
+            || { echo "::error::taqwright_api34 was not created under $ANDROID_AVD_HOME"; exit 1; }
 
       - name: Install project dependencies from npm
         working-directory: proj
