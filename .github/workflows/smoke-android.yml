@@ -65,6 +65,9 @@ jobs:
 
           export default defineConfig({
             testDir: './tests',
+            // Cold CI emulator (swiftshader) + per-test 58MB APK reinstall is slow;
+            // session creation / reset alone can exceed Playwright's 30s default.
+            timeout: 180000,
             projects: [
               {
                 name: 'android',
