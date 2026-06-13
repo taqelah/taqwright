@@ -1,17 +1,19 @@
 name: Smoke (Android)
 
-# Manual end-to-end smoke test: installs the PUBLISHED @taqwright/taqwright from
-# npm, scaffolds a fresh project, boots an Android emulator, and runs the demo
-# login spec against the real demo app. Manual-only so it never runs (or bills)
-# unless explicitly triggered.
+# Manual end-to-end smoke test of the real user path: installs the PUBLISHED
+# @taqwright/taqwright from npm, scaffolds a fresh project, then lets TAQWRIGHT
+# itself provision the toolchain + create + boot the Android emulator and run the
+# demo login spec. Manual-only so it never runs (or bills) unless triggered.
 on:
   workflow_dispatch:
 
 jobs:
   android-smoke:
-    name: Scaffold + run sample test on an Android emulator
+    name: taqwright-provisioned emulator + sample test
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Heavy: `taqwright install --with-avd` pulls a managed JDK + Android SDK +
+    # system image (~2 GB) and the emulator cold-boots inside the first test.
+    timeout-minutes: 45
 
     steps:
       # Hardware acceleration for the emulator (ubuntu-latest runners expose KVM).
@@ -27,61 +29,55 @@ jobs:
         with:
           node-version: 24
 
-      # UiAutomator2 driver needs a JDK on PATH.
-      - name: Set up Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 17
-
-      # taqwright's appium.autoStart spawns `appium` from PATH — install it + the
-      # Android driver up front so the run doesn't pay a cold `npx appium` fetch.
-      - name: Install Appium + UiAutomator2 driver
-        run: |
-          npm install -g appium@^3
-          appium driver install uiautomator2
-
-      # Scaffold from the published package. --no-install skips the scaffold's
-      # git+ssh devDependency (0.0.24); --demo-app downloads DemoApp-v1.0.0.apk
-      # and writes the login example spec.
-      - name: Scaffold a taqwright project
+      # taqwright provisions everything itself: --install-toolchain pulls a managed
+      # JDK + Android SDK + Appium + uiautomator2 into ~/.cache/taqwright, --with-avd
+      # creates AVD `taqwright_api34`, --demo-app downloads DemoApp-v1.0.0.apk and
+      # writes the login spec. --no-install skips the scaffold's git+ssh npm step
+      # (installed from npm below). No setup-java / global Appium / emulator action.
+      - name: Scaffold + provision toolchain & AVD via taqwright
         run: |
           npx @taqwright/taqwright@latest init smoke \
             --platform android --demo-app \
-            --no-install-toolchain --no-with-avd --no-install -y
+            --install-toolchain --with-avd --no-install -y
 
       # Install the real package from npm (overwrites the git+ssh devDep line).
       - name: Install project dependencies from npm
         working-directory: smoke
         run: npm install --save-dev @taqwright/taqwright@latest typescript @types/node
 
-      # The scaffolded config guesses a placeholder AVD name; point it at the
-      # emulator the action will boot (emulator-5554) and tell taqwright not to
-      # cold-boot it (autoStartDevice: false) but to start Appium (autoStart: true).
-      - name: Point config at the CI emulator
+      # Keep taqwright-managed boot (string device.name -> appium:avd, autoStartDevice),
+      # but inject headless emulator flags (taqwright's own launcher isn't headless-
+      # safe, so boot must go through Appium with -no-window via avdArgs) and a large
+      # timeout since the first test cold-boots the AVD + installs uiautomator2 + APK.
+      - name: Write CI config (headless avdArgs + timeout)
         run: |
           cat > smoke/taqwright.config.ts <<'EOF'
           import { defineConfig, Platform } from '@taqwright/taqwright';
 
           export default defineConfig({
             testDir: './tests',
-            // Cold CI emulator (swiftshader) + per-test 58MB APK reinstall is slow;
-            // session creation / reset alone can exceed Playwright's 30s default.
-            timeout: 180000,
+            // First test cold-boots the AVD via Appium (boot + uiautomator2 install +
+            // 58MB APK install), which blows past Playwright's 30s default.
+            timeout: 300000,
             projects: [
               {
                 name: 'android',
                 use: {
                   platform: Platform.ANDROID,
-                  device: { provider: 'emulator', udid: 'emulator-5554' },
+                  // String name -> taqwright sets appium:avd so Appium boots this AVD.
+                  device: { provider: 'emulator', name: 'taqwright_api34' },
                   resetBetweenTests: true,
                   buildPath: './app/DemoApp-v1.0.0.apk',
                   appBundleId: 'com.taqelah.demo_app',
                   appium: {
                     autoStart: true,
-                    autoStartDevice: false,
+                    autoStartDevice: true,
                     host: 'localhost',
                     port: 4723,
+                  },
+                  capabilities: {
+                    // Appium's UiAutomator2 driver launches the emulator with these.
+                    'appium:avdArgs': '-no-window -no-audio -no-boot-anim -gpu swiftshader_indirect',
                   },
                 },
               },
@@ -89,18 +85,11 @@ jobs:
           });
           EOF
 
-      # Creates the AVD, boots it with KVM, and runs `script` once it's online.
-      - name: Boot emulator + run the sample test
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 34
-          arch: x86_64
-          target: google_apis
-          profile: pixel_6
-          force-avd-creation: true
-          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -no-boot-anim -camera-back none
-          disable-animations: true
-          script: cd smoke && npm test
+      # taqwright starts (managed) Appium, which boots taqwright_api34 headless and
+      # runs the demo login specs.
+      - name: Run the sample test
+        working-directory: smoke
+        run: npm test
 
       - name: Upload report on failure
         if: failure()
