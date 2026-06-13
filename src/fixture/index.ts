@@ -21,7 +21,7 @@ import {
   isTransientDeviceError,
 } from '../inspector/devices.js';
 import { logger } from '../logger.js';
-import { avdBootPreflightError } from '../setup/avd.js';
+import { avdBootPreflightError, bootableAvdName } from '../setup/avd.js';
 import { createDeviceProvider, isCloudProvider } from '../providers/index.js';
 import { Tracer } from '../tracer/index.js';
 import { wrapForTracing } from '../tracer/proxy.js';
@@ -239,11 +239,15 @@ export const test = baseTest.extend<TaqwrightFixtures, TaqwrightWorkerFixtures>(
         partitioned.appium.port !== undefined &&
         !(await isPortOpen(partitioned.appium.host, partitioned.appium.port))
       ) {
-        proc = await startAppiumServer('worker', {
-          host: partitioned.appium.host,
-          port: partitioned.appium.port,
-          basePath: partitioned.appium.path,
-        });
+        proc = await startAppiumServer(
+          'worker',
+          {
+            host: partitioned.appium.host,
+            port: partitioned.appium.port,
+            basePath: partitioned.appium.path,
+          },
+          bootableAvdName(partitioned),
+        );
       }
       try {
         await use(partitioned);

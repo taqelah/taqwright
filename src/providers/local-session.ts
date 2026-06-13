@@ -7,6 +7,7 @@ import {
   type LocalDeviceConfig,
 } from '../types/index.js';
 import { getApkDetails, installDriver, startAppiumServer } from './appium.js';
+import { bootableAvdName } from '../setup/avd.js';
 
 type LocalDevice = EmulatorDeviceConfig | LocalDeviceConfig;
 
@@ -81,7 +82,7 @@ export async function openLocalSession(
 ): Promise<WebDriverClient> {
   const driverName = use.platform === Platform.ANDROID ? 'uiautomator2' : 'xcuitest';
   await installDriver(driverName);
-  await startAppiumServer(use.device.provider);
+  await startAppiumServer(use.device.provider, {}, bootableAvdName(use));
   const WebDriver = (await import('webdriver')).default;
   return WebDriver.newSession({ ...appiumConnection(use), capabilities } as never);
 }

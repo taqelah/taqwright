@@ -478,7 +478,8 @@ async function checkManagedSdkAvdImages(): Promise<DoctorCheck | undefined> {
     status: 'warn',
     detail:
       `${missing.length} AVD${missing.length === 1 ? '' : 's'} reference a system image not in the managed SDK: ${list}. ` +
-      `Fix one of: (a) install the missing image into the managed SDK — \`${sdkmanagerCmds[0]}\` ` +
+      `taqwright auto-boots such an AVD against your system SDK when the image is present there; ` +
+      `otherwise fix one of: (a) install the missing image into the managed SDK — \`${sdkmanagerCmds[0]}\` ` +
       `(uses \`${path.join(androidHome, 'cmdline-tools', 'latest', 'bin', 'sdkmanager')}\`); ` +
       `(b) bypass the managed toolchain — \`rm ${path.join(path.dirname(androidHome), 'manifest.json')}\` ` +
       `(falls back to your shell ANDROID_HOME); ` +

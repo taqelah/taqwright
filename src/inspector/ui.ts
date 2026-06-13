@@ -4212,21 +4212,9 @@ export const INSPECTOR_HTML = `<!doctype html>
     if (data.toolsMissing?.adb) warns.push("adb not on PATH — Android emulators won't show.");
     if (data.toolsMissing?.emulator) warns.push("emulator not on PATH — Android AVDs won't show (install Android command-line tools).");
     if (data.toolsMissing?.xcrun) warns.push("xcrun not on PATH — iOS simulators won't show (Xcode required).");
-    let warnHtml = warns.map((w) => '<div class="device-warn">' + escapeHtml(w) + '</div>').join('');
-    // Android-only: AVDs hidden because their system image isn't in the active
-    // (managed) SDK, so the managed emulator can't boot them. Explain + how to
-    // fall back to the user's own SDK. (No backticks/apostrophes in this inline
-    // JS — they break the outer template literal; see CLAUDE.md.)
-    if (deviceTab === 'android' && data.hiddenAndroid) {
-      const h = data.hiddenAndroid;
-      const n = h.names.length;
-      const msg =
-        n + ' emulator' + (n === 1 ? '' : 's') + ' hidden (' + h.names.join(', ') +
-        ') — created with a different Android SDK and cannot boot under the managed SDK. ' +
-        'To use your own emulators, delete ' + h.manifestPath + ' and reopen. ' +
-        'Or run "taqwright install --with-avd" to create a managed emulator.';
-      warnHtml += '<div class="device-warn">' + escapeHtml(msg) + '</div>';
-    }
+    const warnHtml = warns.map((w) => '<div class="device-warn">' + escapeHtml(w) + '</div>').join('');
+    // AVDs whose system image is installed in no SDK are shown but flagged
+    // unbootable per-tile (see renderTile) rather than hidden here.
     $('devices-warn').innerHTML = warnHtml;
 
     // Update tab counts and active class.
@@ -4320,11 +4308,14 @@ export const INSPECTOR_HTML = `<!doctype html>
     const isCloud = !!dev.cloud;
     const isBooting = bootingDevices.has(bootingKey(dev)) || dev.state === 'booting';
     const isBooted = dev.state === 'booted';
+    // Shutdown AVD whose system image is in no SDK — cannot boot (Start disabled).
+    const unbootable = !isCloud && dev.bootable === false && !isBooted && !isBooting;
     const selected = isBooted && isSelected(dev);
     const stateLabel = isCloud
       ? (dev.cloud.realDevice ? 'cloud · real' : 'cloud · sim')
       : isBooting ? 'booting…'
       : isBooted ? 'live'
+      : unbootable ? 'image missing'
       : 'shutdown';
     const stateClass = isCloud
       ? 'pill live'
@@ -4334,9 +4325,10 @@ export const INSPECTOR_HTML = `<!doctype html>
     const stateIcon = isBooting
       ? '<span class="spinner"></span>'
       : '<span class="led"></span>';
-    const meta = isCloud
+    const baseMeta = isCloud
       ? (dev.osVersion + (dev.type === 'ios' ? ' · iOS' : ' · Android'))
       : ([dev.osVersion, dev.avdName].filter(Boolean).join(' · ') || '—');
+    const meta = unbootable && dev.bootHint ? baseMeta + ' · ' + dev.bootHint : baseMeta;
     const showUdid = !isCloud && isBooted;
     let actions = '';
     if (isCloud) {
@@ -4344,6 +4336,9 @@ export const INSPECTOR_HTML = `<!doctype html>
       // session opens on Connect (step 3). The whole tile is the Use button.
     } else if (isBooting) {
       actions += '<button class="icon" disabled>booting…</button>';
+    } else if (unbootable) {
+      actions += '<button class="icon" disabled title="' + escapeHtml(dev.bootHint || '') +
+        '">image missing</button>';
     } else if (dev.state === 'shutdown') {
       actions += '<button class="icon" data-act="start">▶ Start</button>';
     } else if (isBooted) {
