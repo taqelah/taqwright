@@ -4,6 +4,7 @@ import type { ChildProcess } from 'node:child_process';
 import { loadTaqwrightConfig } from './config.js';
 import { startAppiumServer, killAppiumOnPort } from './providers/appium.js';
 import { isCloudProvider } from './providers/index.js';
+import { bootableAvdName } from './setup/avd.js';
 import type { TaqwrightConfig } from './types/index.js';
 
 /** A local Appium server the CLI should pre-start before the run. */
@@ -12,6 +13,8 @@ export interface AutoStartTarget {
   host: string;
   port: number;
   basePath?: string;
+  /** Android emulator AVD this server will boot — selects which SDK to spawn against. */
+  avd?: string;
 }
 
 export async function isPortOpen(host: string, port: number, timeoutMs = 500): Promise<boolean> {
@@ -92,7 +95,8 @@ export function autoStartTargets(
     if (seen.has(key)) continue;
     seen.add(key);
 
-    targets.push({ name: project.name ?? '', host, port, basePath: appium.path });
+    const avd = project.use ? bootableAvdName(project.use) : undefined;
+    targets.push({ name: project.name ?? '', host, port, basePath: appium.path, avd });
   }
 
   return targets;
@@ -113,7 +117,7 @@ export async function maybeAutoStartAppium(
   if (!cfg) return [];
 
   const procs: ChildProcess[] = [];
-  for (const { host, port, basePath } of autoStartTargets(cfg, projectFilter)) {
+  for (const { host, port, basePath, avd } of autoStartTargets(cfg, projectFilter)) {
     if (await isPortOpen(host, port)) {
       const killed = await killAppiumOnPort(port);
       if (killed) {
@@ -130,7 +134,7 @@ export async function maybeAutoStartAppium(
     }
 
     console.log(`taqwright: starting Appium server on ${host}:${port}…`);
-    const proc = await startAppiumServer('unknown', { host, port, basePath });
+    const proc = await startAppiumServer('unknown', { host, port, basePath }, avd);
     procs.push(proc);
   }
   return procs;

@@ -39,6 +39,36 @@ export const manifestPath = (): string => path.join(taqwrightHome(), 'manifest.j
 
 const exe = (name: string): string => (process.platform === 'win32' ? `${name}.exe` : name);
 
+/**
+ * The user's *system* Android SDK, recoverable even after {@link applyManagedEnv}
+ * has overridden `ANDROID_HOME` with the managed toolchain. Resolution order:
+ *   1. `TAQWRIGHT_SYSTEM_ANDROID_HOME` — the shell value captured before the
+ *      managed override (set by {@link applyManagedEnv}, inherited by workers);
+ *   2. the live `ANDROID_HOME` when no managed override is in effect;
+ *   3. the default Android Studio SDK location for the platform, so a system AVD
+ *      still resolves even when the user never exported `ANDROID_HOME`.
+ * Returns `undefined` if none can be found.
+ */
+export function systemAndroidHome(): string | undefined {
+  const captured = process.env.TAQWRIGHT_SYSTEM_ANDROID_HOME;
+  if (captured && captured.trim()) return captured;
+  if (!readManifest() && process.env.ANDROID_HOME?.trim()) return process.env.ANDROID_HOME;
+  const home = os.homedir();
+  const candidates =
+    process.platform === 'darwin'
+      ? [path.join(home, 'Library', 'Android', 'sdk')]
+      : process.platform === 'win32'
+        ? [
+            path.join(
+              process.env.LOCALAPPDATA || path.join(home, 'AppData', 'Local'),
+              'Android',
+              'Sdk',
+            ),
+          ]
+        : [path.join(home, 'Android', 'Sdk')];
+  return candidates.find((c) => existsSync(c));
+}
+
 export function readManifest(): ManagedManifest | undefined {
   try {
     const f = manifestPath();
@@ -90,6 +120,12 @@ export function applyManagedEnv(): void {
   if (process.env.__TAQWRIGHT_MANAGED_APPLIED === '1') return;
   const m = managedEnv();
   if (m) {
+    // Capture the shell's ANDROID_HOME before we clobber it, so a user-selected
+    // AVD whose system image lives in the *system* SDK can still be booted (see
+    // androidEnvForAvd). Set-once; inherited by spawned Playwright workers.
+    if (!process.env.TAQWRIGHT_SYSTEM_ANDROID_HOME && process.env.ANDROID_HOME?.trim()) {
+      process.env.TAQWRIGHT_SYSTEM_ANDROID_HOME = process.env.ANDROID_HOME;
+    }
     Object.assign(process.env, m);
     process.env.__TAQWRIGHT_MANAGED_APPLIED = '1';
   }
