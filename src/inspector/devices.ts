@@ -262,15 +262,16 @@ export async function startAndroidEmulator(avdName: string): Promise<void> {
   }
   // POSIX: detach so the boot survives our process (own session). Windows: do
   // NOT detach — DETACHED_PROCESS leaves the console-subsystem `emulator.exe`
-  // with no console, so it AllocConsole()s a *visible* window and dumps its
-  // launch config there (windowsHide/CREATE_NO_WINDOW can't suppress a console
-  // allocated after start). Without detach, windowsHide gives a hidden console
-  // and the process still outlives us (Windows doesn't auto-kill children). The
-  // emulator's own GUI window is unaffected. Stop via the Devices card / `adb emu kill`.
+  // with no console, so it AllocConsole()s a *visible* config-dump window.
+  // Sharing our console (detached:false) + piped stdio (the dump goes to the
+  // drained pipes below) keeps that window from ever appearing. Crucially we do
+  // NOT set `windowsHide` — it maps to STARTF_USESHOWWINDOW/SW_HIDE, which the
+  // emulator's Qt GUI honors and would hide the emulator window itself. The
+  // emulator still outlives us on Windows (no auto-kill of children); stop it via
+  // the Devices card / `adb emu kill`. Mirrors the runner's `stdio:'pipe'` launch.
   const child = spawn(cmd, ['-avd', avdName], {
     detached: process.platform !== 'win32',
     stdio: ['ignore', 'pipe', 'pipe'],
-    windowsHide: true,
     env,
   });
   // Surface an *immediate* launch failure (bad SDK root, missing system image,
@@ -318,6 +319,50 @@ export async function startAndroidEmulator(avdName: string): Promise<void> {
     child.once('exit', onExit);
     child.once('error', onError);
   });
+
+  // Best-effort: the emulator opens its window at its remembered (often tiny)
+  // size and there's no CLI flag to maximize it, so on Windows nudge the window
+  // to maximized once it appears. Fire-and-forget + cosmetic — never blocks or
+  // throws; a no-op everywhere else.
+  if (process.platform === 'win32') maximizeEmulatorWindowWindows();
+}
+
+/**
+ * Windows-only, best-effort: poll for the emulator's top-level window and
+ * `ShowWindow(SW_MAXIMIZE)` it (the Qt window has no remembered size flag we can
+ * pass at launch). Runs a detached, console-hidden PowerShell helper so it never
+ * touches the boot flow; swallows all errors. The Qt window may ignore it.
+ */
+function maximizeEmulatorWindowWindows(): void {
+  // Poll up to ~30s for a process whose main window is the Android Emulator and
+  // maximize it. SW_MAXIMIZE = 3. Passed via -EncodedCommand (base64 UTF-16LE) to
+  // sidestep all shell quoting.
+  const ps = [
+    'Add-Type @"',
+    'using System;using System.Runtime.InteropServices;',
+    'public class TwWin{',
+    '[DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h,int n);',
+    '[DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);}',
+    '"@',
+    '$deadline=(Get-Date).AddSeconds(30)',
+    'while((Get-Date) -lt $deadline){',
+    '  $p=Get-Process | Where-Object {$_.MainWindowTitle -like "*Android Emulator*" -and $_.MainWindowHandle -ne 0} | Select-Object -First 1',
+    '  if($p){ [TwWin]::ShowWindow($p.MainWindowHandle,3) | Out-Null; [TwWin]::SetForegroundWindow($p.MainWindowHandle) | Out-Null; break }',
+    '  Start-Sleep -Milliseconds 1000',
+    '}',
+  ].join('\n');
+  try {
+    const encoded = Buffer.from(ps, 'utf16le').toString('base64');
+    const child = spawn(
+      'powershell',
+      ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded],
+      { detached: true, stdio: 'ignore', windowsHide: true },
+    );
+    child.on('error', () => {});
+    child.unref();
+  } catch {
+    /* best-effort cosmetic — ignore */
+  }
 }
 
 export async function stopAndroidEmulator(serial: string): Promise<void> {
