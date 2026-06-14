@@ -152,12 +152,12 @@ jobs:
                     port: 4723,
                   },
                   capabilities: {
-                    // Headless software GPU + extra cores/RAM: the runner has 4
-                    // cores / ~16 GB, and the emulator defaults to only 2 cores
-                    // (it warns "will run more smoothly with 4"), which is what
-                    // makes the UiAutomator2 instrumentation crash on cold boot.
+                    // Headless software GPU + more RAM. (Don't bump -cores past
+                    // the 2-vCPU runner — over-subscribing makes the cold-boot
+                    // UiAutomator2 instrumentation flakier, not less; the first
+                    // attempt is covered by retries below.)
                     'appium:avdArgs':
-                      '-no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -cores 4 -memory 4096',
+                      '-no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -memory 4096',
                     // The CI emulator is software-rendered, so APK installs are
                     // slow. Raise the adb / UiAutomator2-server install+launch
                     // timeouts well above their 20s/30s defaults so createSession
