@@ -1,5 +1,5 @@
 import { mkdir, writeFile, readdir } from 'node:fs/promises';
-import { existsSync, statSync } from 'node:fs';
+import { existsSync, lstatSync, statSync } from 'node:fs';
 import { resolve, join, basename, relative, dirname } from 'node:path';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -723,7 +723,12 @@ async function isTaqwrightGloballyLinked(): Promise<boolean> {
   try {
     // exec() always goes through a shell, so `npm` resolves to npm.cmd on Windows.
     const { stdout } = await execP('npm root -g');
-    return existsSync(join(stdout.trim(), '@taqwright', 'taqwright'));
+    const p = join(stdout.trim(), '@taqwright', 'taqwright');
+    // Only a real `npm link` (a symlink to a dev checkout) counts. A plain
+    // `npm i -g @taqwright/taqwright` is a real directory of the published,
+    // dist-only package — linking that would trigger its `prepare` build and
+    // fail (no src/tsc). For a global install we want the registry path instead.
+    return existsSync(p) && lstatSync(p).isSymbolicLink();
   } catch {
     return false;
   }
