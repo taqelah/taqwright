@@ -148,6 +148,14 @@ jobs:
                   },
                   capabilities: {
                     'appium:avdArgs': '-no-window -no-audio -no-boot-anim -gpu swiftshader_indirect',
+                    // The CI emulator is software-rendered + 2-core, so APK
+                    // installs are slow. Raise the adb / UiAutomator2-server
+                    // install+launch timeouts well above their 20s/30s defaults
+                    // so createSession doesn't abort mid-install.
+                    'appium:adbExecTimeout': 120000,
+                    'appium:uiautomator2ServerInstallTimeout': 120000,
+                    'appium:uiautomator2ServerLaunchTimeout': 120000,
+                    'appium:androidInstallTimeout': 180000,
                   },
                 },
               },
