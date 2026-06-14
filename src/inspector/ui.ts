@@ -435,6 +435,16 @@ export const INSPECTOR_HTML = `<!doctype html>
     background: #000; box-shadow: 0 6px 22px rgba(0,0,0,0.10); }
   #screen-img { display: block; max-width: 100%; max-height: calc(100vh - 100px);
     user-select: none; -webkit-user-drag: none; }
+  /* Graceful fallback when a snapshot fails / returns no screenshot — shown
+     instead of the browser's broken-image glyph. */
+  .screen-unavailable-msg { display: none; box-sizing: border-box; width: 300px;
+    max-width: 100%; min-height: 480px; max-height: calc(100vh - 100px);
+    flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+    padding: 24px; text-align: center; color: var(--text-dim); }
+  .screen-unavailable-title { font-size: 14px; font-weight: 600; color: var(--text); }
+  .screen-unavailable-sub { font-size: 12.5px; }
+  #screen-host.screen-unavailable #screen-img { display: none; }
+  #screen-host.screen-unavailable .screen-unavailable-msg { display: flex; }
   #highlight { position: absolute; border: 2px solid var(--accent);
     background: rgba(9,105,218,0.12); box-shadow: 0 0 0 9999px rgba(0,0,0,0.40) inset;
     pointer-events: none; transition: all 0.12s ease-out; }
@@ -1293,6 +1303,10 @@ export const INSPECTOR_HTML = `<!doctype html>
       </div>
       <div id="screen-host">
         <img id="screen-img" alt="device screen" />
+        <div class="screen-unavailable-msg">
+          <div class="screen-unavailable-title">Device screen unavailable</div>
+          <div class="screen-unavailable-sub">Couldn't capture the device — retrying…</div>
+        </div>
         <div id="highlight" style="display:none"></div>
         <div id="screen-action-overlay" class="screen-action-overlay" aria-hidden="true">
           <div class="screen-action-card">
@@ -2040,6 +2054,12 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
     if (autoRefreshOn) scheduleNextRefresh(Math.max(base, elapsed));
   }
 
+  // Toggle the "device screen unavailable" fallback (shown when a snapshot
+  // fails or returns no screenshot, so we never render a broken <img>).
+  function setScreenUnavailable(on) {
+    $('screen-host').classList.toggle('screen-unavailable', !!on);
+  }
+
   async function fetchSnapshot(opts) {
     const force = opts && opts.force;
     if (snapshotInFlight) {
@@ -2069,7 +2089,14 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
       state.sourceXml = j.source;
       $('session-meta').textContent = formatSessionMeta(j.platform, j.project);
       $('screen-meta').textContent = j.viewport.w + ' × ' + j.viewport.h;
-      $('screen-img').src = 'data:image/png;base64,' + j.screenshot;
+      // Only set the image when there's an actual screenshot — an empty/missing
+      // one would render as a broken <img>; show the fallback instead.
+      if (typeof j.screenshot === 'string' && j.screenshot.length > 0) {
+        $('screen-img').src = 'data:image/png;base64,' + j.screenshot;
+        setScreenUnavailable(false);
+      } else {
+        setScreenUnavailable(true);
+      }
       renderTree();
       if (hierarchyMode === 'xml') refreshHierarchyXml();
       if (prevXpath && prevSig) {
@@ -2093,6 +2120,7 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
       setStatus('idle');
     } catch (err) {
       setStatus('error: ' + err.message);
+      setScreenUnavailable(true);
     } finally {
       snapshotInFlight = false;
     }
@@ -2719,6 +2747,10 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
       y: Math.round((ev.clientY - rect.top) * scale),
     };
   }
+
+  // A corrupt/truncated data URI fails to decode — fall back rather than show
+  // the browser's broken-image glyph.
+  $('screen-img').addEventListener('error', () => setScreenUnavailable(true));
 
   $('screen-img').addEventListener('mouseup', (ev) => {
     const pt = imgToDevice(ev);
@@ -4254,8 +4286,22 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
     updateConnectSummary();
   }
 
+  // Whether the wizard is allowed to advance forward off the given step (its
+  // prerequisites are met). Mirrors the gating in updateConnectSummary.
+  function canAdvanceFrom(step) {
+    if (step === 1) {
+      return isCloudMode() ? cloudCredsValid : $('appium-pill').classList.contains('live');
+    }
+    if (step === 2) return !!$('cap-device').value.trim();
+    return true;
+  }
+
   function goToStep(n) {
     if (n < 1 || n > 3) return;
+    // Hard-gate forward navigation: never advance past a step whose
+    // prerequisites aren't met — even for programmatic callers like the guided
+    // tour. Backward navigation and re-selecting the current step are free.
+    if (n > wizardStep && !canAdvanceFrom(wizardStep)) return;
     wizardStep = n;
     document.querySelectorAll('.wizard-page').forEach((p) => {
       p.classList.toggle('active', Number(p.getAttribute('data-page')) === n);
@@ -5192,6 +5238,34 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
     const t = document.querySelector('.tab[data-tab="' + name + '"]');
     if (t) t.click();
   }
+  // Live tour only: the Locators / Attributes panels are empty until an element
+  // is selected, so the tour would spotlight a blank panel. If the user hasn't
+  // selected anything yet, auto-select a representative node (one with an id /
+  // text / content-desc, else the first node) so those steps show real content.
+  function tourEnsureSelection() {
+    if (state.selected) return;
+    let pick = null;
+    for (const [, el] of state.nodeMap) {
+      if (!el || !el.getAttribute) continue;
+      if (
+        el.getAttribute('resource-id') ||
+        el.getAttribute('text') ||
+        el.getAttribute('content-desc') ||
+        el.getAttribute('name') ||
+        el.getAttribute('label')
+      ) {
+        pick = el;
+        break;
+      }
+    }
+    if (!pick) {
+      for (const [, el] of state.nodeMap) {
+        pick = el;
+        break;
+      }
+    }
+    if (pick) selectElement(pick);
+  }
   // Switch the demo stage's mock right-hand tab (Record / Script / Locators / Attributes).
   function showDemoTab(name) {
     ['rec', 'script', 'loc', 'attrs'].forEach((k) => {
@@ -5234,9 +5308,9 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
       body: 'Press <b>Start record</b>, select an element, then choose an action — Click, Type, Clear, gestures… The <b>Actions / Screen / Assertions</b> sub-tabs switch what you capture. Each step is appended live.' },
     { sel: '#tab-script', before: function () { tourClickTab('script'); }, title: 'Recorded script',
       body: 'Your test in <b>Taqwright</b> (runnable), or <b>Python</b> / <b>Java</b> (steps only). Use <b>⎘ Copy</b>, <b>↓ Export</b> (saves into your tests folder), or Clear.' },
-    { sel: '#tab-locators', before: function () { tourClickTab('locators'); }, title: 'Locators',
+    { sel: '#tab-locators', before: function () { tourEnsureSelection(); tourClickTab('locators'); }, title: 'Locators',
       body: 'Ranked, uniqueness-verified selectors for the selected element — id, accessibility id, UIAutomator / NSPredicate / Class Chain, xpath. The <b>recommended</b> pick is on top; click any to copy.' },
-    { sel: '#tab-attrs', before: function () { tourClickTab('attrs'); }, title: 'Attributes',
+    { sel: '#tab-attrs', before: function () { tourEnsureSelection(); tourClickTab('attrs'); }, title: 'Attributes',
       body: 'The selected element\\'s full attribute set (resource-id, class, text, content-desc, bounds…) plus its xpath.' },
     { sel: '#btn-disconnect', before: function () { tourClickTab('record'); }, title: 'Done',
       body: 'When finished, <b>Disconnect</b> ends the session and returns to setup. Reopen this tour any time with <b>? Help</b>.' },
