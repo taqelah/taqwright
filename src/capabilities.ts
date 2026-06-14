@@ -134,6 +134,14 @@ export function appiumRemoteOptions(use: TaqwrightUseOptions): Capabilities.Remo
     port: use.appium?.port ?? 4723,
     path: use.appium?.path ?? '/',
     logLevel: use.appium?.logLevel ?? 'warn',
+    // Honor the documented client session-creation timeout for local/emulator
+    // sessions too (cloud already wires it in src/providers/cloud.ts). Left
+    // unset → wdio's 120000ms default; raise it when a cold-boot emulator's
+    // `POST /session` is slow (e.g. UiAutomator2 server install + instrumentation
+    // startup on a software-GPU CI emulator).
+    ...(use.appium?.connectionTimeout !== undefined
+      ? { connectionRetryTimeout: use.appium.connectionTimeout }
+      : {}),
     capabilities: buildCapabilities(use),
   };
 }
