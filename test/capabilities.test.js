@@ -111,6 +111,14 @@ describe('appiumRemoteOptions', () => {
       { hostname: '10.0.0.2', port: 4799, path: '/wd/hub', logLevel: 'info' },
     );
   });
+  test('connectionTimeout maps to wdio connectionRetryTimeout when set', () => {
+    const o = appiumRemoteOptions(android({ appium: { connectionTimeout: 300000 } }));
+    assert.equal(o.connectionRetryTimeout, 300000);
+  });
+  test('connectionRetryTimeout is left unset (wdio default) when not configured', () => {
+    const o = appiumRemoteOptions(android());
+    assert.equal('connectionRetryTimeout' in o, false);
+  });
 });
 
 describe('buildCapabilities — autoLaunch self-heal', () => {
