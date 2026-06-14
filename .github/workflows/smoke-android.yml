@@ -11,9 +11,14 @@ jobs:
   android-smoke:
     name: Run sample test on an existing emulator
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 40
 
     steps:
+      # Brings in the committed e2e/ browser test + the repo lockfile (this
+      # workflow otherwise builds entirely from the published npm package).
+      - name: Checkout
+        uses: actions/checkout@v6
+
       # Hardware acceleration for the emulator (ubuntu-latest runners expose KVM).
       - name: Enable KVM
         run: |
@@ -26,6 +31,13 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 24
+
+      # Install the repo's deps (gives us @playwright/test to run the e2e config)
+      # and the Chromium browser the codegen e2e drives.
+      - name: Install repo deps + Playwright Chromium
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
 
       # UiAutomator2 driver needs a JDK on PATH.
       - name: Set up Java
@@ -98,13 +110,46 @@ jobs:
           force-avd-creation: true
           emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -no-boot-anim -camera-back none
           disable-animations: true
-          script: cd smoke && npm test
+          # Everything must run inside this action's `script` — the emulator only
+          # exists for its duration. First the codegen browser e2e, then the
+          # existing mobile login spec.
+          script: |
+            set -e
+            # Appium for the codegen e2e (the mobile npm test starts its own later).
+            appium > /tmp/appium-codegen.log 2>&1 &
+            APPIUM_PID=$!
+            for i in $(seq 1 30); do curl -sf http://localhost:4723/status && break || sleep 2; done
+            # Inspector server (no auto-open) on 4280, from the published package in smoke/.
+            ( cd smoke && npx taqwright codegen --no-open --port 4280 ) > /tmp/codegen.log 2>&1 &
+            CODEGEN_PID=$!
+            for i in $(seq 1 30); do curl -sf http://localhost:4280 && break || sleep 2; done
+            # Browser e2e against the inspector (config at the repo root).
+            npx playwright test --config e2e/playwright.config.ts
+            # Tear down before the mobile test (which starts its own Appium on 4723).
+            kill $CODEGEN_PID || true
+            kill $APPIUM_PID || true
+            sleep 2
+            # Existing mobile smoke test.
+            cd smoke && npm test
 
-      - name: Upload report on failure
+      - name: Upload mobile report on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
           path: smoke/playwright-report/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Upload codegen e2e artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: codegen-e2e
+          path: |
+            e2e/playwright-report/
+            e2e/test-results/
+            /tmp/codegen.log
+            /tmp/appium-codegen.log
           if-no-files-found: ignore
           retention-days: 7
