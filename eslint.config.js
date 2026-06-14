@@ -6,7 +6,14 @@ import tseslint from 'typescript-eslint';
 export default tseslint.config(
   {
     // dist/ is build output; coverage/ is generated. Lint src/, test/, scripts/.
-    ignores: ['dist/**', 'node_modules/**', 'coverage/**'],
+    ignores: [
+      'dist/**',
+      'node_modules/**',
+      'coverage/**',
+      // Generated Playwright E2E artifacts (the HTML report bundles its own JS).
+      '**/playwright-report/**',
+      '**/test-results/**',
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
