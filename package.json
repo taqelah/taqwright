@@ -42,7 +42,7 @@
     "test:watch": "node --test --watch test/*.test.js",
     "test:e2e": "playwright test --config e2e/playwright.config.ts",
     "test:coverage": "npm run build && node --test --experimental-test-coverage test/*.test.js",
-    "prepare": "npm run build",
+    "prepare": "node scripts/prepare.mjs",
     "prepublishOnly": "npm run build",
     "version": "node scripts/sync-readme-version.mjs && git add README.md"
   },
