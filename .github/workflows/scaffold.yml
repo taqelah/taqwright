@@ -130,6 +130,11 @@ jobs:
           export default defineConfig({
             testDir: './tests',
             timeout: 300000,
+            // First boot of the headless software-GPU emulator is flaky: the
+            // UiAutomator2 instrumentation can crash on the cold device, aborting
+            // session creation. Retries re-run the test on the now-warm emulator,
+            // where session creation reliably succeeds.
+            retries: 2,
             projects: [
               {
                 name: 'android',
@@ -147,11 +152,16 @@ jobs:
                     port: 4723,
                   },
                   capabilities: {
-                    'appium:avdArgs': '-no-window -no-audio -no-boot-anim -gpu swiftshader_indirect',
-                    // The CI emulator is software-rendered + 2-core, so APK
-                    // installs are slow. Raise the adb / UiAutomator2-server
-                    // install+launch timeouts well above their 20s/30s defaults
-                    // so createSession doesn't abort mid-install.
+                    // Headless software GPU + extra cores/RAM: the runner has 4
+                    // cores / ~16 GB, and the emulator defaults to only 2 cores
+                    // (it warns "will run more smoothly with 4"), which is what
+                    // makes the UiAutomator2 instrumentation crash on cold boot.
+                    'appium:avdArgs':
+                      '-no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -cores 4 -memory 4096',
+                    // The CI emulator is software-rendered, so APK installs are
+                    // slow. Raise the adb / UiAutomator2-server install+launch
+                    // timeouts well above their 20s/30s defaults so createSession
+                    // doesn't abort mid-install.
                     'appium:adbExecTimeout': 120000,
                     'appium:uiautomator2ServerInstallTimeout': 120000,
                     'appium:uiautomator2ServerLaunchTimeout': 120000,
