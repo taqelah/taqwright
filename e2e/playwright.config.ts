@@ -22,6 +22,9 @@ export default defineConfig({
   reporter: [['list'], ['html', { open: 'never', outputFolder: 'playwright-report' }]],
   use: {
     ...devices['Desktop Chrome'],
+    // Debug aid: `E2E_CHROME=1 npm run test:e2e -- --headed` runs in your installed
+    // Google Chrome instead of bundled Chromium. No effect in CI (env unset).
+    ...(process.env.E2E_CHROME ? { channel: 'chrome' } : {}),
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     // Debug aid: `SLOWMO=900 npm run test:e2e -- --headed` to watch each step.
