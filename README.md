@@ -206,10 +206,6 @@ Open the inspector and auto-start recording on Connect (alias of `inspect --reco
 
 `-c, --config <file>` · `--project <name>` · `--port <n>` (default `4280`) · `--host <host>` (default `localhost`) · `--no-open`
 
-### `taqwright inspect`
-
-Open the inspector web UI against a device — same options as `codegen`, plus `--record` (start recording the moment Connect succeeds).
-
 ### `taqwright devices`
 
 List connected devices, simulators, and emulators.
