@@ -1,0 +1,108 @@
+name: Bug report
+description: Report something in taqwright that isn't working as expected.
+title: '[Bug]: '
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug! A few notes before you start:
+
+        - **Security issue?** Do **not** open a public issue — see [SECURITY.md](https://github.com/taqelah/taqwright/blob/main/SECURITY.md).
+        - **Setup / environment help?** Check [CONTRIBUTING.md](https://github.com/taqelah/taqwright/blob/main/CONTRIBUTING.md) and run `taqwright doctor` first.
+        - The more reproducible the report, the faster we can fix it.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Describe the actual behavior and what you expected instead.
+      placeholder: |
+        Actual: ...
+        Expected: ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: A numbered list, ideally with a minimal test or `taqwright.config.ts` snippet.
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - iOS
+        - Android
+        - Both
+    validations:
+      required: true
+
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Where does it run?
+      options:
+        - Local / emulator
+        - BrowserStack
+        - LambdaTest
+    validations:
+      required: true
+
+  - type: input
+    id: taqwright-version
+    attributes:
+      label: taqwright version
+      placeholder: e.g. 0.0.27
+    validations:
+      required: true
+
+  - type: input
+    id: node-version
+    attributes:
+      label: Node version
+      description: taqwright supports Node >=24 <26.
+      placeholder: e.g. 24.4.0
+    validations:
+      required: true
+
+  - type: input
+    id: appium-version
+    attributes:
+      label: Appium version
+      description: Appium 3.x is supported; 2.x is best-effort.
+      placeholder: e.g. 3.0.0
+
+  - type: textarea
+    id: doctor
+    attributes:
+      label: '`taqwright doctor` output'
+      description: Paste the full output — it captures your Node, Appium, driver, and device environment.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / trace
+      description: Relevant log output, stack traces, or a link to a trace. Optional.
+      render: shell
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Confirmations
+      options:
+        - label: I searched existing issues and didn't find a duplicate.
+          required: true
+        - label: I'm on the latest released version of taqwright.
+          required: true

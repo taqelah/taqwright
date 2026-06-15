@@ -1,0 +1,54 @@
+name: Feature request
+description: Suggest an idea or improvement for taqwright.
+title: '[Feature]: '
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea! Please describe the problem first — it helps us
+        weigh solutions against the actual need.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / motivation
+      description: What's painful or missing today? What are you trying to accomplish?
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: What would you like taqwright to do?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches or workarounds you've tried or thought about. Optional.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of taqwright does this touch?
+      options:
+        - CLI
+        - Inspector / codegen
+        - Mobile / Locator API
+        - Providers (cloud)
+        - Config
+        - Docs
+        - Other
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Confirmations
+      options:
+        - label: I searched existing issues and didn't find a duplicate request.
+          required: true
