@@ -37,7 +37,8 @@ If you've used Playwright, you already know taqwright. Like [Mobilewright](https
 | **Cross-platform**       | iOS + Android, one API                                              | iOS + Android, one API             |
 | **Test runner**          | Playwright Test fixtures                                            | Playwright Test fixtures           |
 | **Automation engine**    | Appium 3 / WebDriver                                                | mobilecli (custom)                 |
-| **Recording & AI**       | Built-in `codegen` recorder + AI test generation                    | Agent-first (accessibility tree)   |
+| **Codegen tool**         | Yes (built-in `codegen`)                                            | No                                 |
+| **AI / agents**          | AI test generation                                                  | First-class (accessibility tree)   |
 | **Real devices (cloud)** | BrowserStack, LambdaTest                                            | mobile-use.com                     |
 | **Locators**             | Roles / labels + id / xpath / UiAutomator / predicate / class-chain | Roles / labels                     |
 
