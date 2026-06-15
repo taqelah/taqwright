@@ -1161,8 +1161,6 @@ export const INSPECTOR_HTML = `<!doctype html>
       <div class="card card-caps flex">
         <div class="card-head">
           <h2>Capabilities</h2>
-          <span class="grow"></span>
-          <button class="icon" id="btn-caps-reset" title="Reset to defaults from taqwright.config.ts">↺ Reset</button>
         </div>
         <div class="caps-fields">
           <div class="field">
@@ -1732,8 +1730,7 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
             <code>↻ Refresh</code> the list, and <b>Start</b> a shutdown emulator (or select a
             running one / a cloud device).</li>
           <li><b>Step 3 — App &amp; capabilities:</b> point at the app under test with
-            <b>Browse…</b>, tweak or <b>+ Add</b> Appium capabilities (<b>↺ Reset</b> restores the
-            config defaults), then <b>Connect →</b>.</li>
+            <b>Browse…</b>, tweak or <b>+ Add</b> Appium capabilities, then <b>Connect →</b>.</li>
         </ul>
       </div>
     </details>
@@ -4078,7 +4075,6 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
     $('btn-appium-recheck').onclick = refreshAppiumPill;
     $('btn-appium-restart').onclick = restartAppium;
     $('btn-appium-start').onclick = startAppium;
-    $('btn-caps-reset').onclick = () => applyCapsToForm(initial.defaults.capabilities);
     $('btn-connect').onclick = doConnect;
     $('btn-add-cap').onclick = () => addExtraRow({ key: '', value: '' }, true);
     $('btn-devices-refresh').onclick = loadDevices;
@@ -4292,7 +4288,9 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
     if (step === 1) {
       return isCloudMode() ? cloudCredsValid : $('appium-pill').classList.contains('live');
     }
-    if (step === 2) return !!$('cap-device').value.trim();
+    // Require an actual selected, booted device — not just a pre-filled
+    // cap-device value (config defaults seed it, which would wrongly enable Next).
+    if (step === 2) return selectedDeviceKey !== null;
     return true;
   }
 
@@ -4557,8 +4555,10 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
       return;
     }
     if (wizardStep === 2) {
-      const sel = $('cap-device').value.trim();
-      if (sel) {
+      // Gate on the real selection (a tapped, booted device), not the pre-filled
+      // cap-device value — otherwise Next is enabled before any live device is picked.
+      if (selectedDeviceKey !== null) {
+        const sel = $('cap-device').value.trim();
         summary.innerHTML =
           'Selected <strong>' + escapeHtml(sel) + '</strong> — click <strong>Next</strong> or pick another device.';
         nextBtn.disabled = false;
@@ -4722,6 +4722,20 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
 
   function renderDevices() {
     const data = lastDeviceData;
+
+    // Drop a stale selection: if the selected device is no longer booted (e.g.
+    // it was stopped, or shut down between polls), clear it so Next disables —
+    // a selection must always point at a currently-live device.
+    if (selectedDeviceKey !== null) {
+      const all = [...(data.android || []), ...(data.ios || [])];
+      const stillLive = all.some((d) => d.state === 'booted' && bootingKey(d) === selectedDeviceKey);
+      if (!stillLive) {
+        selectedDeviceKey = null;
+        selectedCloudDevice = null;
+        $('cap-device').value = '';
+        updateConnectSummary();
+      }
+    }
 
     // Tool-missing warnings.
     const warns = [];
@@ -4936,7 +4950,9 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
         const found = list.find((d) => bootingKey(d) === key);
         if (found && found.state === 'booted') {
           bootingDevices.delete(key);
-          renderDevices();
+          // Auto-select the device the user just started — no manual click needed.
+          // selectDevice() also re-renders (✓) and enables Next (gated on selection).
+          selectDevice(found);
           showToast(dev.name + ' is up and ready.', 'success', { title: 'Device booted' });
           return;
         }
@@ -5288,7 +5304,7 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
     { sel: '#btn-devices-refresh', before: function () { goToStep(2); }, title: 'Step 2 — Pick a device',
       body: 'Switch the <b>Android / iOS</b> tabs and <b>↻ Refresh</b> the list. <b>Start</b> a shutdown emulator, or pick a running one / a cloud device.' },
     { sel: '#btn-app-browse', before: function () { goToStep(3); }, title: 'Step 3 — App & capabilities',
-      body: 'Point at the app under test with <b>Browse…</b>, then tweak or <b>+ Add</b> Appium capabilities (<b>↺ Reset</b> restores config defaults).' },
+      body: 'Point at the app under test with <b>Browse…</b>, then tweak or <b>+ Add</b> Appium capabilities.' },
     { sel: '#btn-connect', before: function () { goToStep(3); }, title: 'Connect',
       body: 'Hit <b>Connect →</b> to open the session and enter the inspector.' },
     { sel: null, title: 'You are set',
