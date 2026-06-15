@@ -33,6 +33,13 @@ test('User can login', async ({ mobile }) => {
 </p>
 <p align="center"><a href="https://www.youtube.com/watch?v=FBxFg1XbuKE">▶ Watch the codegen demo</a></p>
 
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=pk7wky1KHX8">
+    <img src="https://img.youtube.com/vi/pk7wky1KHX8/maxresdefault.jpg" alt="Taqwright demo — watch on YouTube" width="640" />
+  </a>
+</p>
+<p align="center"><a href="https://www.youtube.com/watch?v=pk7wky1KHX8">▶ Watch the demo</a></p>
+
 ## Why Taqwright?
 
 If you've used Playwright, you already know Taqwright.
