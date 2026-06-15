@@ -1161,8 +1161,6 @@ export const INSPECTOR_HTML = `<!doctype html>
       <div class="card card-caps flex">
         <div class="card-head">
           <h2>Capabilities</h2>
-          <span class="grow"></span>
-          <button class="icon" id="btn-caps-reset" title="Reset to defaults from taqwright.config.ts">↺ Reset</button>
         </div>
         <div class="caps-fields">
           <div class="field">
@@ -1732,8 +1730,7 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
             <code>↻ Refresh</code> the list, and <b>Start</b> a shutdown emulator (or select a
             running one / a cloud device).</li>
           <li><b>Step 3 — App &amp; capabilities:</b> point at the app under test with
-            <b>Browse…</b>, tweak or <b>+ Add</b> Appium capabilities (<b>↺ Reset</b> restores the
-            config defaults), then <b>Connect →</b>.</li>
+            <b>Browse…</b>, tweak or <b>+ Add</b> Appium capabilities, then <b>Connect →</b>.</li>
         </ul>
       </div>
     </details>
@@ -4078,7 +4075,6 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
     $('btn-appium-recheck').onclick = refreshAppiumPill;
     $('btn-appium-restart').onclick = restartAppium;
     $('btn-appium-start').onclick = startAppium;
-    $('btn-caps-reset').onclick = () => applyCapsToForm(initial.defaults.capabilities);
     $('btn-connect').onclick = doConnect;
     $('btn-add-cap').onclick = () => addExtraRow({ key: '', value: '' }, true);
     $('btn-devices-refresh').onclick = loadDevices;
@@ -5308,7 +5304,7 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
     { sel: '#btn-devices-refresh', before: function () { goToStep(2); }, title: 'Step 2 — Pick a device',
       body: 'Switch the <b>Android / iOS</b> tabs and <b>↻ Refresh</b> the list. <b>Start</b> a shutdown emulator, or pick a running one / a cloud device.' },
     { sel: '#btn-app-browse', before: function () { goToStep(3); }, title: 'Step 3 — App & capabilities',
-      body: 'Point at the app under test with <b>Browse…</b>, then tweak or <b>+ Add</b> Appium capabilities (<b>↺ Reset</b> restores config defaults).' },
+      body: 'Point at the app under test with <b>Browse…</b>, then tweak or <b>+ Add</b> Appium capabilities.' },
     { sel: '#btn-connect', before: function () { goToStep(3); }, title: 'Connect',
       body: 'Hit <b>Connect →</b> to open the session and enter the inspector.' },
     { sel: null, title: 'You are set',
