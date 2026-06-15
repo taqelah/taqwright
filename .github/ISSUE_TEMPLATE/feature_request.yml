@@ -1,6 +1,6 @@
 name: Feature request
 description: Suggest an idea or improvement for taqwright.
-title: "[Feature]: "
+title: '[Feature]: '
 labels: [enhancement]
 body:
   - type: markdown
