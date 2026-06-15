@@ -115,13 +115,6 @@ npm install
 npm test            # run the default suite
 ```
 
-<p align="center">
-  <a href="https://www.youtube.com/watch?v=KD--K31a70Q">
-    <img src="https://img.youtube.com/vi/KD--K31a70Q/maxresdefault.jpg" alt="Taqwright demo — watch on YouTube" width="640" />
-  </a>
-</p>
-<p align="center"><a href="https://www.youtube.com/watch?v=KD--K31a70Q">▶ Watch the demo</a></p>
-
 ### Parallel testing demo
 
 The local Android suite ships four run modes, each its own project:
