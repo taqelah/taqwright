@@ -30,7 +30,7 @@ test('User can login', async ({ mobile }) => {
 
 If you've used Playwright, you already know taqwright. Like [Mobilewright](https://github.com/mobile-next/mobilewright), it brings the Playwright developer experience to mobile — the difference is what's underneath.
 
-|                          | taqwright                                                           | Mobilewright                       |
+|                          | Taqwright                                                           | Mobilewright                       |
 | ------------------------ | ------------------------------------------------------------------- | ---------------------------------- |
 | **API style**            | Playwright (`getByRole`, `expect`)                                  | Playwright (`getByRole`, `expect`) |
 | **Auto-wait**            | Built-in, every action                                              | Built-in, every action             |
