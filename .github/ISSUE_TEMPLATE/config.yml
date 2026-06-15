@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/taqelah/taqwright/security/advisories/new
+    about: Please report vulnerabilities privately — never in a public issue. See SECURITY.md.
+  - name: Questions & documentation
+    url: https://github.com/taqelah/taqwright#readme
+    about: Check the README and docs for usage, setup, and the CLI/API reference.
