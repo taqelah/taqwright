@@ -177,6 +177,54 @@ Refine a `Locator`: `.filter({ has, hasNot, hasText, hasNotText, visible })`, `.
 - **System:** `getClipboard()` / `setClipboard(t)`, `getLocation()` / `setLocation(loc)`, `setPermission()` (Android), `getNetworkConnection()` / `setNetworkConnection()` (Android), `pushFile()` / `pullFile()`, `getDeviceLogs()`, `getDeviceTime()`, `setLocale()`, `openDeepLink(url)`, `acceptAlert()` / `dismissAlert()` / `getAlertText()`, `startScreenRecording()` / `stopScreenRecording()`
 - **Escape hatch:** `mobile.raw` — the underlying WebDriver client
 
+## CLI
+
+Run `taqwright <command> --help` for the full option list.
+
+### `taqwright test [filter...]`
+
+Run your tests (delegates to the Playwright runner; unknown flags are forwarded).
+
+`-c, --config <file>` · `--project <name...>` · `--grep <re>` / `--grep-invert <re>` · `--reporter <r>` · `--retries <n>` · `--timeout <ms>` · `--workers <n>` · `--shard <x/n>` · `--list` · `--pass-with-no-tests`
+
+### `taqwright init [dir]`
+
+Scaffold a new project (interactive).
+
+`--platform <android|ios|both>` · `--test-dir <name>` · `--install` / `--no-install` · `--install-toolchain` / `--no-install-toolchain` · `--with-avd` / `--no-with-avd` · `--demo-app` / `--no-demo-app` · `-y, --yes`
+
+### `taqwright codegen`
+
+Open the inspector and auto-start recording on Connect (alias of `inspect --record`).
+
+`-c, --config <file>` · `--project <name>` · `--port <n>` (default `4280`) · `--host <host>` (default `localhost`) · `--no-open`
+
+### `taqwright inspect`
+
+Open the inspector web UI against a device — same options as `codegen`, plus `--record` (start recording the moment Connect succeeds).
+
+### `taqwright devices`
+
+List connected devices, simulators, and emulators.
+
+### `taqwright doctor`
+
+Check your environment for mobile-development readiness. `--json` for machine-readable output.
+
+### `taqwright install`
+
+Auto-install the Android toolchain (JDK + SDK + Appium) — zero-touch.
+
+`--force` (reinstall) · `--with-avd` (also create an emulator) · `--print-env` (print shell export lines)
+
+### `taqwright show-report [report]`
+
+Serve the HTML report. `--host <host>` (default `localhost`) · `--port <port>` (default `9323`)
+
+### `taqwright merge-reports <dir>`
+
+Merge blob reports into a single report. `--reporter <r>` · `-c, --config <file>`
+
 ## Guides
 
 | Guide                                                                       | What it covers                                                      |
