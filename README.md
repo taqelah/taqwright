@@ -26,6 +26,13 @@ test('User can login', async ({ mobile }) => {
 
 > 📚 **Full documentation: [taqwright.dev/docs](https://www.taqwright.dev/docs/category/getting-started)** — install taqwright, write and generate tests, run and debug them, and scale out in parallel.
 
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=FBxFg1XbuKE">
+    <img src="https://img.youtube.com/vi/FBxFg1XbuKE/maxresdefault.jpg" alt="Taqwright codegen demo — watch on YouTube" width="640" />
+  </a>
+</p>
+<p align="center"><a href="https://www.youtube.com/watch?v=FBxFg1XbuKE">▶ Watch the codegen demo</a></p>
+
 ## Why Taqwright?
 
 If you've used Playwright, you already know Taqwright.
