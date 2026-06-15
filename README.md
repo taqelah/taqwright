@@ -102,6 +102,49 @@ npx taqwright codegen            # record a test as you tap through the app (Pla
 npx taqwright test               # run your tests
 ```
 
+## Start from the sample project
+
+Prefer a ready-made project? Clone the demo, install, and run it to see a passing suite right away.
+
+[**Taqwright/taqwright-demo**](https://github.com/Taqwright/taqwright-demo) is a full taqwright suite for the bundled **DemoApp** (a Flutter app). It runs on local emulators / simulators or on real devices in the cloud via BrowserStack, and the app binaries (`.apk` / `.app`) ship in the repo so it works out of the box.
+
+```bash
+git clone https://github.com/Taqwright/taqwright-demo
+cd taqwright-demo
+npm install
+npm test            # run the default suite
+```
+
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=KD--K31a70Q">
+    <img src="https://img.youtube.com/vi/KD--K31a70Q/maxresdefault.jpg" alt="Taqwright demo — watch on YouTube" width="640" />
+  </a>
+</p>
+<p align="center"><a href="https://www.youtube.com/watch?v=KD--K31a70Q">▶ Watch the demo</a></p>
+
+### Parallel testing demo
+
+The local Android suite ships four run modes, each its own project:
+
+| Script                | Project          | Mode                                              | Workers |
+| --------------------- | ---------------- | ------------------------------------------------- | ------- |
+| `npm run test:single` | `android-single` | one emulator, pinned udid (`emulator-5554`)       | 1       |
+| `npm run test:pool`   | `android-pool-2` | hand-written 2-emulator udid pool (`5554`+`5556`) | 2       |
+| `npm run test:auto1`  | `android-auto-1` | auto-detect host AVDs                             | 1       |
+| `npm run test:auto2`  | `android-auto-2` | auto-detect host AVDs                             | 2       |
+
+`npm run test:auto2` runs the `android-auto-2` project — `device.autoDiscover` with `workers: 2`. taqwright finds your host AVDs, boots two of them, and fans the specs across both in parallel (one Appium server + one device per worker, with isolated driver ports). No hand-written device pool required.
+
+It needs two AVDs available (`Pixel_10_Pro_XL` + `Pixel_10_Pro_XL_2`) — check with `npx taqwright devices`.
+
+<p align="center">
+  <a href="https://youtu.be/KD--K31a70Q">
+    <img src="https://img.youtube.com/vi/KD--K31a70Q/maxresdefault.jpg" alt="Taqwright parallel-testing demo — watch on YouTube" width="640" />
+  </a>
+</p>
+
+<p align="center"><a href="https://youtu.be/KD--K31a70Q">▶ Watch the parallel-testing demo</a></p>
+
 ## Configure
 
 Create `taqwright.config.ts` at your project root:
