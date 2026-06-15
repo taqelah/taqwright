@@ -43,6 +43,19 @@ If you've used Playwright, you already know Taqwright.
 | **Cross-platform**         | iOS + Android, one API                                                               | iOS + Android, one API                                                                                               |
 | **Test runner**            | Playwright Test fixtures                                                             | Playwright Test fixtures                                                                                             |
 
+## Features
+
+- **Playwright-style API** — `mobile.getByRole('button').click()`, just like `page.getByRole('button').click()`
+- **Cross-platform** — one API for iOS and Android
+- **Native, React Native & Flutter** — drive any app
+- **Auto-waiting** — actions wait for elements to be visible, enabled, and stable before interacting
+- **Retry assertions** — `expect(locator).toBeVisible()` polls until satisfied or times out
+- **Rich locators** — `getByRole` / `getByText` / `getByLabel`, plus `xpath` / UiAutomator / NSPredicate / class-chain
+- **Built-in codegen** — `npx taqwright codegen` records a test as you tap through the app
+- **Cloud devices** — run on BrowserStack & LambdaTest real devices
+- **Traces, video & reports** — per-action traces, full-run videos, and Playwright reporters
+- **Test fixtures** — `@taqwright/taqwright` adds a `mobile` fixture to Playwright Test
+
 ## Requirements
 
 - Node.js **24.x or 25.x** (Node 26+ has a known bug).
