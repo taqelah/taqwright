@@ -30,17 +30,17 @@ test('User can login', async ({ mobile }) => {
 
 If you've used Playwright, you already know taqwright. Like [Mobilewright](https://github.com/mobile-next/mobilewright), it brings the Playwright developer experience to mobile — the difference is what's underneath.
 
-|                          | Taqwright                                                                            | Mobilewright                       |
-| ------------------------ | ------------------------------------------------------------------------------------ | ---------------------------------- |
-| **API style**            | Playwright (`getByRole`, `expect`)                                                   | Playwright (`getByRole`, `expect`) |
-| **Auto-wait**            | Built-in, every action                                                               | Built-in, every action             |
-| **Cross-platform**       | iOS + Android, one API                                                               | iOS + Android, one API             |
-| **Test runner**          | Playwright Test fixtures                                                             | Playwright Test fixtures           |
-| **Automation engine**    | Appium 3 / WebDriver                                                                 | mobilecli (custom)                 |
-| **Codegen tool**         | Yes (built-in `codegen`)                                                             | No                                 |
-| **AI / agents**          | AI test generation                                                                   | First-class (accessibility tree)   |
-| **Real devices (cloud)** | BrowserStack, LambdaTest — and support for all your favourite cloud device platforms | Vendor-locked to mobile-use.com    |
-| **Locators**             | Roles / labels + id / xpath / UiAutomator / predicate / class-chain                  | Roles / labels                     |
+|                          | Taqwright                                                                            | Mobilewright                                                                                                         |
+| ------------------------ | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| **API style**            | Playwright (`getByRole`, `expect`)                                                   | Playwright (`getByRole`, `expect`)                                                                                   |
+| **Auto-wait**            | Built-in, every action                                                               | Built-in, every action                                                                                               |
+| **Cross-platform**       | iOS + Android, one API                                                               | iOS + Android, one API                                                                                               |
+| **Test runner**          | Playwright Test fixtures                                                             | Playwright Test fixtures                                                                                             |
+| **Automation engine**    | Appium 3 / WebDriver                                                                 | mobilecli (custom)                                                                                                   |
+| **Codegen tool**         | Yes (built-in `codegen`)                                                             | No                                                                                                                   |
+| **AI / agents**          | AI test generation — [Taqwright Lime CLI](https://www.taqwright.ai/), Appium MCP     | Depends on accessibility ids — no xpath/platform fallback, so legacy apps without accessibility metadata are limited |
+| **Real devices (cloud)** | BrowserStack, LambdaTest — and support for all your favourite cloud device platforms | Vendor-locked to mobile-use.com                                                                                      |
+| **Locators**             | Roles / labels + id / xpath / UiAutomator / predicate / class-chain                  | Roles / labels                                                                                                       |
 
 ## Requirements
 
