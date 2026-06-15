@@ -35,10 +35,10 @@ test('User can login', async ({ mobile }) => {
 
 <p align="center">
   <a href="https://www.youtube.com/watch?v=pk7wky1KHX8">
-    <img src="https://img.youtube.com/vi/pk7wky1KHX8/maxresdefault.jpg" alt="Taqwright demo — watch on YouTube" width="640" />
+    <img src="https://img.youtube.com/vi/pk7wky1KHX8/maxresdefault.jpg" alt="Taqwright in 3 minutes: install, scaffold, and run your first Android test — watch on YouTube" width="640" />
   </a>
 </p>
-<p align="center"><a href="https://www.youtube.com/watch?v=pk7wky1KHX8">▶ Watch the demo</a></p>
+<p align="center"><a href="https://www.youtube.com/watch?v=pk7wky1KHX8">▶ Taqwright in 3 minutes: install, scaffold, and run your first Android test</a></p>
 
 ## Why Taqwright?
 
