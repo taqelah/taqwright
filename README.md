@@ -28,20 +28,18 @@ test('User can login', async ({ mobile }) => {
 
 ## Why taqwright?
 
-If you've used Playwright, you already know taqwright.
+If you've used Playwright, you already know taqwright. Like [Mobilewright](https://github.com/mobile-next/mobilewright), it brings the Playwright developer experience to mobile — the difference is what's underneath.
 
-|                               | taqwright                                                      | Appium                  | Detox             | XCTest / Espresso |
-| ----------------------------- | -------------------------------------------------------------- | ----------------------- | ----------------- | ----------------- |
-| **API style**                 | Playwright (`getByRole`, `expect`)                             | Selenium (WebDriver)    | Custom            | Native framework  |
-| **Auto-wait**                 | Built-in, every action                                         | Manual waits            | Partial           | Manual            |
-| **Setup**                     | `npm i -D @taqwright/taqwright` + `npx taqwright init`         | Server + drivers + caps | React Native only | Xcode / AS only   |
-| **Cross-platform**            | iOS + Android, one API                                         | Yes, verbose            | React Native only | Single platform   |
-| **Record / generate**         | Built-in `codegen` (+ AI generation)                           | Limited                 | No                | No                |
-| **Real devices in the cloud** | Yes (BrowserStack, LambdaTest)                                 | Yes (complex)           | Simulators only   | Yes               |
-| **Locators**                  | Semantic roles / labels + id / xpath / UiAutomator / predicate | XPath, CSS, ID          | Test IDs          | Native queries    |
-
-> taqwright runs on **Appium 3** under the hood — you get Playwright ergonomics and a flat locator
-> API without writing raw WebDriver.
+|                          | taqwright                                                           | Mobilewright                       |
+| ------------------------ | ------------------------------------------------------------------- | ---------------------------------- |
+| **API style**            | Playwright (`getByRole`, `expect`)                                  | Playwright (`getByRole`, `expect`) |
+| **Auto-wait**            | Built-in, every action                                              | Built-in, every action             |
+| **Cross-platform**       | iOS + Android, one API                                              | iOS + Android, one API             |
+| **Test runner**          | Playwright Test fixtures                                            | Playwright Test fixtures           |
+| **Automation engine**    | Appium 3 / WebDriver                                                | mobilecli (custom)                 |
+| **Recording & AI**       | Built-in `codegen` recorder + AI test generation                    | Agent-first (accessibility tree)   |
+| **Real devices (cloud)** | BrowserStack, LambdaTest                                            | mobile-use.com                     |
+| **Locators**             | Roles / labels + id / xpath / UiAutomator / predicate / class-chain | Roles / labels                     |
 
 ## Requirements
 
