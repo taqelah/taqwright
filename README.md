@@ -59,7 +59,9 @@ If you've used Playwright, you already know Taqwright.
 - **Retry assertions** — `expect(locator).toBeVisible()` polls until satisfied or times out
 - **Rich locators** — `getByRole` / `getByText` / `getByLabel`, plus `xpath` / UiAutomator / NSPredicate / class-chain
 - **Built-in codegen** — `npx taqwright codegen` records a test as you tap through the app
-- **Cloud devices** — run on BrowserStack & LambdaTest real devices
+- **Cloud devices in ~10 seconds** — point a project at BrowserStack or LambdaTest with a few lines of config
+- **Auto-discover devices** — `device.autoDiscover` finds and assigns emulators/simulators to each worker
+- **Parallel testing, handled** — taqwright spawns and manages a dedicated Appium session per worker automatically
 - **Traces, video & reports** — per-action traces, full-run videos, and Playwright reporters
 - **Test fixtures** — `@taqwright/taqwright` adds a `mobile` fixture to Playwright Test
 
