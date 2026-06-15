@@ -4292,7 +4292,9 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
     if (step === 1) {
       return isCloudMode() ? cloudCredsValid : $('appium-pill').classList.contains('live');
     }
-    if (step === 2) return !!$('cap-device').value.trim();
+    // Require an actual selected, booted device — not just a pre-filled
+    // cap-device value (config defaults seed it, which would wrongly enable Next).
+    if (step === 2) return selectedDeviceKey !== null;
     return true;
   }
 
@@ -4557,8 +4559,10 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
       return;
     }
     if (wizardStep === 2) {
-      const sel = $('cap-device').value.trim();
-      if (sel) {
+      // Gate on the real selection (a tapped, booted device), not the pre-filled
+      // cap-device value — otherwise Next is enabled before any live device is picked.
+      if (selectedDeviceKey !== null) {
+        const sel = $('cap-device').value.trim();
         summary.innerHTML =
           'Selected <strong>' + escapeHtml(sel) + '</strong> — click <strong>Next</strong> or pick another device.';
         nextBtn.disabled = false;
@@ -4722,6 +4726,20 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
 
   function renderDevices() {
     const data = lastDeviceData;
+
+    // Drop a stale selection: if the selected device is no longer booted (e.g.
+    // it was stopped, or shut down between polls), clear it so Next disables —
+    // a selection must always point at a currently-live device.
+    if (selectedDeviceKey !== null) {
+      const all = [...(data.android || []), ...(data.ios || [])];
+      const stillLive = all.some((d) => d.state === 'booted' && bootingKey(d) === selectedDeviceKey);
+      if (!stillLive) {
+        selectedDeviceKey = null;
+        selectedCloudDevice = null;
+        $('cap-device').value = '';
+        updateConnectSummary();
+      }
+    }
 
     // Tool-missing warnings.
     const warns = [];
