@@ -26,6 +26,23 @@ test('User can login', async ({ mobile }) => {
 
 > 📚 **Full documentation: [taqwright.dev/docs](https://www.taqwright.dev/docs/category/getting-started)** — install taqwright, write and generate tests, run and debug them, and scale out in parallel.
 
+## Why taqwright?
+
+If you've used Playwright, you already know taqwright.
+
+|                               | taqwright                                                      | Appium                  | Detox             | XCTest / Espresso |
+| ----------------------------- | -------------------------------------------------------------- | ----------------------- | ----------------- | ----------------- |
+| **API style**                 | Playwright (`getByRole`, `expect`)                             | Selenium (WebDriver)    | Custom            | Native framework  |
+| **Auto-wait**                 | Built-in, every action                                         | Manual waits            | Partial           | Manual            |
+| **Setup**                     | `npm i -D @taqwright/taqwright` + `npx taqwright init`         | Server + drivers + caps | React Native only | Xcode / AS only   |
+| **Cross-platform**            | iOS + Android, one API                                         | Yes, verbose            | React Native only | Single platform   |
+| **Record / generate**         | Built-in `codegen` (+ AI generation)                           | Limited                 | No                | No                |
+| **Real devices in the cloud** | Yes (BrowserStack, LambdaTest)                                 | Yes (complex)           | Simulators only   | Yes               |
+| **Locators**                  | Semantic roles / labels + id / xpath / UiAutomator / predicate | XPath, CSS, ID          | Test IDs          | Native queries    |
+
+> taqwright runs on **Appium 3** under the hood — you get Playwright ergonomics and a flat locator
+> API without writing raw WebDriver.
+
 ## Requirements
 
 - Node.js **24.x or 25.x** (Node 26+ has a known bug).
