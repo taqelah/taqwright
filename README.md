@@ -119,6 +119,64 @@ export default defineConfig({
 
 Every `defineConfig` / `use` option is documented in the [Configuration guide](https://www.taqwright.dev/docs/configuration).
 
+## API reference
+
+A quick reference to the most-used API. See **[taqwright.dev/docs](https://www.taqwright.dev/docs)** for the full reference.
+
+### Fixtures
+
+```ts
+import { test, expect } from '@taqwright/taqwright';
+
+test('example', async ({ mobile }) => {
+  // `mobile` drives the device; `mobile.raw` is the underlying WebDriver client.
+});
+```
+
+- **`mobile`** — the device under test (a `Mobile`).
+- **`rawDriver`** — the raw WebDriver client (escape hatch); also `mobile.raw`.
+
+### Locators — `mobile.getBy*(…)` → `Locator`
+
+| Method                            | Notes                                                          |
+| --------------------------------- | -------------------------------------------------------------- |
+| `getByText(text \| RegExp)`       | Visible text (exact or partial)                                |
+| `getByLabel(label)`               | Accessibility label                                            |
+| `getById(id)` / `getByTestId(id)` | resource-id (Android) / accessibility-id (iOS)                 |
+| `getByPlaceholder(text)`          | Input placeholder                                              |
+| `getByRole(role, { name? })`      | Semantic role — `button`, `link`, `textbox`, `switch`, `image` |
+| `getByType(type)`                 | Class / type name                                              |
+| `getByXpath(xpath)`               | XPath expression                                               |
+| `getByUiSelector(selector)`       | Android UiAutomator2 (Android-only)                            |
+| `getByPredicate(predicate)`       | iOS NSPredicate (iOS-only)                                     |
+| `getByClassChain(chain)`          | iOS class chain (iOS-only)                                     |
+| `getByCss(selector)`              | CSS (WebView contexts)                                         |
+
+Refine a `Locator`: `.filter({ has, hasNot, hasText, hasNotText, visible })`, `.first()` / `.last()` / `.nth(n)`, `.locator(child)`, `.and(other)` / `.or(other)`, `.all()`, `.count()`.
+
+### Actions — on a `Locator`
+
+`click()` / `tap()` · `doubleTap()` · `longPress()` · `fill(value)` · `clear()` · `pressSequentially(text, { delay })` · `press(key)` · `focus()` · `blur()` · `check()` / `uncheck()` · `selectOption(value)` · `scrollIntoView()` · `swipeUp/Down/Left/Right()` · `pinchIn()` / `pinchOut()` · `dragTo(target)` / `dragToPoint({ x, y })` · `screenshot()`
+
+### Queries — on a `Locator`
+
+`getText()` · `getValue()` · `getAttribute(name)` · `isVisible()` · `isEnabled()` · `isChecked()` · `isFocused()` · `isEditable()` · `isInViewport()` · `isEmpty()` · `boundingBox()` · `count()` · `all()` · `allInnerTexts()`
+
+### Assertions — `expect(locator).…` (auto-retrying)
+
+`toBeVisible()` · `toBeHidden()` · `toBeEnabled()` · `toBeDisabled()` · `toBeChecked()` · `toBeEditable()` · `toBeFocused()` · `toBeAttached()` · `toBeInViewport()` · `toBeEmpty()` · `toHaveText(string | RegExp)` · `toContainText(string)` · `toHaveValue(string | RegExp)` · `toHaveCount(n)` · `toHaveAttribute(name, value)`
+
+`.not` negates the boolean-state matchers (e.g. `expect(loc).not.toBeChecked()`). The same checks are also available directly on a locator as `locator.assert*()`.
+
+### Device & gestures — `mobile.…`
+
+- **Screen:** `tap(point)`, `swipe(dir)`, `scroll(dir)`, `screenshot()`, `getScreenSize()`, `setOrientation(o)` / `getOrientation()`
+- **Keys:** `press(key)`, `pressButton(HOME | BACK | VOLUME_UP | …)`, `hideKeyboard()`, `isKeyboardShown()`, `goBack()`
+- **App:** `installApp(path)` / `uninstallApp()`, `launchApp()` / `activateApp()` / `terminateApp()`, `isAppInstalled()`, `queryAppState()`, `backgroundApp(s)`, `getCurrentApp()`
+- **WebView / context:** `getContexts()` / `getContext()` / `switchContext(name)`, `switchToWebView()` / `switchToNative()`
+- **System:** `getClipboard()` / `setClipboard(t)`, `getLocation()` / `setLocation(loc)`, `setPermission()` (Android), `getNetworkConnection()` / `setNetworkConnection()` (Android), `pushFile()` / `pullFile()`, `getDeviceLogs()`, `getDeviceTime()`, `setLocale()`, `openDeepLink(url)`, `acceptAlert()` / `dismissAlert()` / `getAlertText()`, `startScreenRecording()` / `stopScreenRecording()`
+- **Escape hatch:** `mobile.raw` — the underlying WebDriver client
+
 ## Guides
 
 | Guide                                                                       | What it covers                                                      |
