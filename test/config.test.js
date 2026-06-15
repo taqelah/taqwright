@@ -14,6 +14,8 @@ import {
   findAutoDiscoverMisconfig,
   effectiveWorkers,
   resolveCliWorkers,
+  withReportDir,
+  TAQWRIGHT_REPORT_DIR,
   TAQWRIGHT_KEY,
 } from '../dist/config.js';
 import { buildCapabilities } from '../dist/capabilities.js';
@@ -32,6 +34,45 @@ function mkConfig(overrides = {}) {
     ...overrides,
   };
 }
+
+describe('withReportDir — html reporter outputFolder', () => {
+  test('bare "html" string → tuple with our outputFolder', () => {
+    assert.deepEqual(withReportDir('html'), ['html', { outputFolder: TAQWRIGHT_REPORT_DIR }]);
+  });
+
+  test('["html", opts] without outputFolder → injected, opts preserved', () => {
+    assert.deepEqual(withReportDir(['html', { open: 'never' }]), [
+      'html',
+      { open: 'never', outputFolder: TAQWRIGHT_REPORT_DIR },
+    ]);
+  });
+
+  test('explicit outputFolder is respected (untouched)', () => {
+    assert.deepEqual(withReportDir(['html', { outputFolder: 'custom' }]), [
+      'html',
+      { outputFolder: 'custom' },
+    ]);
+  });
+
+  test('list form: html entry gets injected, non-html left alone', () => {
+    assert.deepEqual(withReportDir([['list'], ['html', { open: 'never' }]]), [
+      ['list'],
+      ['html', { open: 'never', outputFolder: TAQWRIGHT_REPORT_DIR }],
+    ]);
+  });
+
+  test('undefined reporter is passed through', () => {
+    assert.equal(withReportDir(undefined), undefined);
+  });
+
+  test('defineConfig injects the report dir into the html reporter', () => {
+    const pw = defineConfig(mkConfig({ reporter: [['list'], ['html', { open: 'never' }]] }));
+    assert.deepEqual(pw.reporter, [
+      ['list'],
+      ['html', { open: 'never', outputFolder: TAQWRIGHT_REPORT_DIR }],
+    ]);
+  });
+});
 
 describe('defineConfig — outputDir', () => {
   test('top-level outputDir is forwarded onto the Playwright config', () => {

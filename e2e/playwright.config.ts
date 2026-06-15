@@ -19,7 +19,7 @@ export default defineConfig({
   workers: 1,
   retries: 1,
   outputDir: 'test-results',
-  reporter: [['list'], ['html', { open: 'never', outputFolder: 'playwright-report' }]],
+  reporter: [['list'], ['html', { open: 'never', outputFolder: 'taqwright-report' }]],
   use: {
     ...devices['Desktop Chrome'],
     // Debug aid: `E2E_CHROME=1 npm run test:e2e -- --headed` runs in your installed

@@ -84,6 +84,7 @@ describe('isReservedDirName', () => {
     assert.equal(isReservedDirName('app'), true);
     assert.equal(isReservedDirName('node_modules'), true);
     assert.equal(isReservedDirName('playwright-report'), true);
+    assert.equal(isReservedDirName('taqwright-report'), true);
     assert.equal(isReservedDirName('dist'), true);
     assert.equal(isReservedDirName('CON'), true);
     assert.equal(isReservedDirName('con'), true);
@@ -143,6 +144,7 @@ describe('isValidTestDir', () => {
     assert.equal(isValidTestDir('app'), false);
     assert.equal(isValidTestDir('node_modules'), false);
     assert.equal(isValidTestDir('playwright-report'), false);
+    assert.equal(isValidTestDir('taqwright-report'), false);
     assert.equal(isValidTestDir('dist'), false);
   });
 });

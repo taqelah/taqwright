@@ -568,6 +568,7 @@ const RESERVED_DIR_NAMES = new Set([
   'app',
   'node_modules',
   'playwright-report',
+  'taqwright-report',
   'dist',
 ]);
 
@@ -828,8 +829,11 @@ export default defineConfig({
   testDir: './${testDir}',
   timeout: 60_000,
   expectTimeout: 30_000,
-  // 'html' writes playwright-report/ — view it with: npx taqwright show-report
-  reporter: [['list'], ['html', { open: 'never', title: 'Taqwright Test Report' }]],
+  // 'html' writes taqwright-report/ — view it with: npx taqwright show-report
+  reporter: [
+    ['list'],
+    ['html', { open: 'never', title: 'Taqwright Test Report', outputFolder: 'taqwright-report' }],
+  ],
 
   // ─── Optional top-level overrides ─────────────────────────────────
   // retries: 1,
@@ -1155,7 +1159,7 @@ function gitignoreTemplate(): string {
   return `node_modules
 dist
 test-results
-playwright-report
+taqwright-report
 .DS_Store
 *.log
 `;

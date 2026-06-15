@@ -2,6 +2,7 @@ node_modules
 dist
 appiumwright-report
 test-results
+taqwright-report
 playwright-report
 *.log
 .DS_Store

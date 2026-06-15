@@ -1,5 +1,5 @@
 /**
- * Rebrand Playwright's generated HTML report (`playwright-report/index.html`)
+ * Rebrand Playwright's generated HTML report (`taqwright-report/index.html`)
  * as taqwright's: the tab title `Taqwright Test Report` + the taqwright logo
  * favicon.
  *

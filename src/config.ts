@@ -6,6 +6,57 @@ import { Platform, type TaqwrightConfig, type TaqwrightProjectConfig } from './t
 
 export const TAQWRIGHT_KEY = '__taqwright__';
 
+/**
+ * The HTML report output folder taqwright writes to by default —
+ * `taqwright-report/` rather than Playwright's `playwright-report/`. Threaded
+ * through `defineConfig` (injected into the `html` reporter) and the
+ * `taqwright test` / `show-report` CLI delegators so the branded folder name
+ * stays consistent on every side.
+ */
+export const TAQWRIGHT_REPORT_DIR = 'taqwright-report';
+
+type ReporterOption = PlaywrightTestConfig['reporter'];
+
+/**
+ * Normalize a Playwright `reporter` option so every `html` reporter that
+ * doesn't already pin an `outputFolder` writes to `TAQWRIGHT_REPORT_DIR`. Bare
+ * `'html'` strings are expanded to the `['html', { outputFolder }]` tuple form.
+ * Non-html reporters (`list`, `json`, custom) and an explicit user
+ * `outputFolder` are passed through untouched. Pure — easy to unit-test.
+ */
+export function withReportDir(reporter: ReporterOption): ReporterOption {
+  const applyToEntry = (entry: unknown): unknown => {
+    if (entry === 'html') {
+      return ['html', { outputFolder: TAQWRIGHT_REPORT_DIR }];
+    }
+    if (Array.isArray(entry) && entry[0] === 'html') {
+      const opts = (entry[1] ?? {}) as Record<string, unknown>;
+      if (opts.outputFolder === undefined) {
+        return ['html', { ...opts, outputFolder: TAQWRIGHT_REPORT_DIR }];
+      }
+    }
+    return entry;
+  };
+
+  if (reporter === undefined) return reporter;
+  // A list of reporters: `[['list'], ['html', …]]` or `['html']` shorthand.
+  // Playwright treats a single bare-string reporter (`'html'`) as one reporter,
+  // and a top-level array as a list of `[name, opts?]` tuples. Distinguish the
+  // tuple form `['html', {…}]` from a list whose first entry is a tuple.
+  if (typeof reporter === 'string') {
+    return applyToEntry(reporter) as ReporterOption;
+  }
+  if (Array.isArray(reporter)) {
+    // Single tuple form: `['html', { … }]` — first element is the reporter name.
+    if (typeof reporter[0] === 'string') {
+      return applyToEntry(reporter) as ReporterOption;
+    }
+    // List form: each element is itself a `[name, opts?]` tuple (or string).
+    return reporter.map((entry) => applyToEntry(entry)) as ReporterOption;
+  }
+  return reporter;
+}
+
 /** Playwright config with the taqwright config preserved on a private key. */
 export interface PlaywrightConfigWithEmbedded extends PlaywrightTestConfig {
   [TAQWRIGHT_KEY]?: TaqwrightConfig;
@@ -176,7 +227,7 @@ export function defineConfig(config: TaqwrightConfig): PlaywrightConfigWithEmbed
     testDir: config.testDir,
     testMatch: config.testMatch,
     testIgnore: config.testIgnore,
-    reporter: config.reporter as PlaywrightTestConfig['reporter'],
+    reporter: withReportDir(config.reporter as PlaywrightTestConfig['reporter']),
     globalSetup,
     globalTeardown: config.globalTeardown,
     projects: config.projects.map((p) => ({

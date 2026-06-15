@@ -3,7 +3,12 @@ import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
 import { Command } from 'commander';
-import { findConfigFile, loadTaqwrightConfig, resolveCliWorkers } from '../config.js';
+import {
+  TAQWRIGHT_REPORT_DIR,
+  findConfigFile,
+  loadTaqwrightConfig,
+  resolveCliWorkers,
+} from '../config.js';
 import { maybeAutoStartAppium } from '../auto-appium.js';
 import { runDoctorChecks } from '../doctor.js';
 import { listDevices, type Device } from '../inspector/devices.js';
@@ -178,7 +183,7 @@ program
     // the default folder is known here; custom folders get branded at
     // `show-report` time via the explicit path.
     try {
-      brandReportDir(resolve(process.cwd(), 'playwright-report'));
+      brandReportDir(resolve(process.cwd(), TAQWRIGHT_REPORT_DIR));
     } catch {
       // ignore — report may be absent (non-html reporter) or unreadable
     }
@@ -409,12 +414,15 @@ program
   .option('--port <port>', 'port to serve report on', '9323')
   .action(async (report: string | undefined, opts: Record<string, string>) => {
     const args = ['show-report'];
-    if (report) args.push(report);
+    // Pass our renamed folder explicitly when the user didn't name one —
+    // otherwise Playwright's show-report falls back to its own
+    // `playwright-report` default and can't find the taqwright-branded folder.
+    args.push(report ?? TAQWRIGHT_REPORT_DIR);
     args.push('--host', opts.host, '--port', opts.port);
     // Brand the report (title + taqwright favicon) before Playwright's static
     // server serves it. Honors an explicit report path; best-effort.
     try {
-      brandReportDir(resolve(process.cwd(), report ?? 'playwright-report'));
+      brandReportDir(resolve(process.cwd(), report ?? TAQWRIGHT_REPORT_DIR));
     } catch {
       // ignore — report dir may not exist; Playwright will report that itself
     }

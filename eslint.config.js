@@ -11,6 +11,7 @@ export default tseslint.config(
       'node_modules/**',
       'coverage/**',
       // Generated Playwright E2E artifacts (the HTML report bundles its own JS).
+      '**/taqwright-report/**',
       '**/playwright-report/**',
       '**/test-results/**',
     ],
