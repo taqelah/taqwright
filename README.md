@@ -26,9 +26,9 @@ test('User can login', async ({ mobile }) => {
 
 > 📚 **Full documentation: [taqwright.dev/docs](https://www.taqwright.dev/docs/category/getting-started)** — install taqwright, write and generate tests, run and debug them, and scale out in parallel.
 
-## Why taqwright?
+## Why Taqwright?
 
-If you've used Playwright, you already know taqwright. Like [Mobilewright](https://github.com/mobile-next/mobilewright), it brings the Playwright developer experience to mobile — the difference is what's underneath.
+If you've used Playwright, you already know Taqwright.
 
 |                          | Taqwright                                                                            | Mobilewright                                                                                                         |
 | ------------------------ | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
