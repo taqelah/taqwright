@@ -4954,7 +4954,9 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
         const found = list.find((d) => bootingKey(d) === key);
         if (found && found.state === 'booted') {
           bootingDevices.delete(key);
-          renderDevices();
+          // Auto-select the device the user just started — no manual click needed.
+          // selectDevice() also re-renders (✓) and enables Next (gated on selection).
+          selectDevice(found);
           showToast(dev.name + ' is up and ready.', 'success', { title: 'Device booted' });
           return;
         }
