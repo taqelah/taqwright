@@ -18,7 +18,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version: 26
 
       # --no-install skips the scaffold's git+ssh devDependency (0.0.24); we
       # install the real npm package below.
@@ -51,7 +51,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version: 26
 
       # Exercises the create-taqwright package → it resolves @taqwright/taqwright
       # and delegates to `taqwright init`. Args after `--` are forwarded verbatim.
@@ -93,7 +93,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version: 26
 
       # taqwright provisions everything: --install-toolchain pulls a managed JDK +
       # SDK + Appium + uiautomator2 into ~/.cache/taqwright, --with-avd creates AVD
