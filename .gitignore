@@ -3,6 +3,7 @@ dist
 appiumwright-report
 test-results
 playwright-report
+lcov.info
 *.log
 .DS_Store
 .env
