@@ -8,6 +8,7 @@ import {
 } from '../types/index.js';
 import { getApkDetails, installDriver, startAppiumServer } from './appium.js';
 import { bootableAvdName } from '../setup/avd.js';
+import { ensurePlainGlobalDispatcher } from '../undici-dispatcher.js';
 
 type LocalDevice = EmulatorDeviceConfig | LocalDeviceConfig;
 
@@ -84,6 +85,7 @@ export async function openLocalSession(
   await installDriver(driverName);
   await startAppiumServer(use.device.provider, {}, bootableAvdName(use));
   const WebDriver = (await import('webdriver')).default;
+  ensurePlainGlobalDispatcher();
   return WebDriver.newSession({ ...appiumConnection(use), capabilities } as never);
 }
 

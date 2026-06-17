@@ -9,6 +9,7 @@ import {
 } from '../types/index.js';
 import { isPortOpen } from '../auto-appium.js';
 import { omitLocalEmulatorCaps } from '../capabilities.js';
+import { ensurePlainGlobalDispatcher } from '../undici-dispatcher.js';
 import { startAppiumServer, killAppiumOnPort } from '../providers/appium.js';
 import { createDeviceProvider } from '../providers/index.js';
 import { Recorder, type RecordedAction } from './recorder.js';
@@ -333,6 +334,7 @@ export class InspectorSession {
     applyLocalCapabilityDefaults(capabilities, platformName);
     this.lastCapabilities = capabilities;
     this.activeProvider = null;
+    ensurePlainGlobalDispatcher();
     this.driver = await WebDriver.newSession({
       hostname: appium.host,
       port: appium.port,
