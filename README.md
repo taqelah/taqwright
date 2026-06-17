@@ -8,6 +8,8 @@
   <a href="https://github.com/taqelah/taqwright/tags"><img src="https://img.shields.io/badge/version-0.1.0--beta.0-blue" alt="version" /></a>
   <a href="https://www.npmjs.com/package/@taqwright/taqwright"><img src="https://img.shields.io/npm/v/@taqwright/taqwright/beta?label=npm%20beta&color=orange" alt="npm beta" /></a>
   <a href="https://www.npmjs.com/package/@taqwright/taqwright"><img src="https://img.shields.io/npm/dw/@taqwright/taqwright" alt="npm downloads" /></a>
+  <a href="https://github.com/taqelah/taqwright/actions/workflows/ci.yml"><img src="https://github.com/taqelah/taqwright/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://codecov.io/gh/taqelah/taqwright"><img src="https://codecov.io/gh/taqelah/taqwright/branch/main/graph/badge.svg" alt="coverage" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue" alt="License: Apache 2.0" /></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.4%2B-blue?logo=typescript&logoColor=white" alt="TypeScript 5.4+" /></a>
 </p>
