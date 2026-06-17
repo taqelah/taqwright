@@ -6,6 +6,7 @@ import {
   type DeviceProvider,
 } from '../types/index.js';
 import { logger } from '../logger.js';
+import { ensurePlainGlobalDispatcher } from '../undici-dispatcher.js';
 
 /**
  * One cloud grid expressed as data + a few small functions. The generic
@@ -170,6 +171,7 @@ export class CloudProvider implements DeviceProvider {
     };
 
     const WebDriver = (await import('webdriver')).default;
+    ensurePlainGlobalDispatcher();
     const driver = await WebDriver.newSession(connection as never);
     this.sessionId = driver.sessionId;
 
