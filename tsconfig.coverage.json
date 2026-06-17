@@ -1,0 +1,9 @@
+{
+  // Coverage-only build: same as tsconfig.json but emits source maps so c8 can
+  // remap V8 coverage of the compiled dist/*.js back to the original src/*.ts.
+  // The published package build (`npm run build`) stays map-free.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "sourceMap": true
+  }
+}

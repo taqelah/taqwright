@@ -4,6 +4,7 @@ appiumwright-report
 test-results
 playwright-report
 lcov.info
+coverage
 *.log
 .DS_Store
 .env
