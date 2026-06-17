@@ -28,11 +28,11 @@ export async function runDoctorChecks(): Promise<DoctorCheck[]> {
   const checks: DoctorCheck[] = [];
 
   checks.push({
-    name: 'Node.js 24.x–25.x',
+    name: 'Node.js 24+',
     status: isNodeVersionSupported(process.versions.node) ? 'ok' : 'error',
     detail: isNodeVersionSupported(process.versions.node)
       ? process.version
-      : `${process.version} — taqwright requires Node.js 24 or 25 (Node 26+ has a known bug)`,
+      : `${process.version} — taqwright requires Node.js 24 or newer`,
   });
 
   const adb = await commandExists('adb');
@@ -669,14 +669,13 @@ export function isAppiumVersionSupported(version: string): boolean {
 }
 
 /**
- * Taqwright requires Node 24.x or 25.x. Appium 3 itself also accepts 20.19+ /
- * 22.12+, but we pin tighter so taqwright projects share one consistent runtime
- * baseline — and Node 26+ is excluded because it has a known bug that breaks
- * taqwright. Exported for testing.
+ * Taqwright requires Node 24 or newer. Appium 3 itself also accepts 20.19+ /
+ * 22.12+, but we pin the floor tighter so taqwright projects share one
+ * consistent runtime baseline. No upper bound. Exported for testing.
  */
 export function isNodeVersionSupported(version: string): boolean {
   const m = version.match(/^v?(\d+)\./);
   if (!m) return false;
   const major = Number(m[1]);
-  return Number.isFinite(major) && major >= 24 && major < 26;
+  return Number.isFinite(major) && major >= 24;
 }
