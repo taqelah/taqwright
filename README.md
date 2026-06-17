@@ -88,17 +88,17 @@ If you've used Playwright, you already know Taqwright.
 
 ## Install
 
-taqwright is published on npm:
+taqwright is in public beta on npm — install the `beta` channel:
 
 ```bash
-npm install --save-dev @taqwright/taqwright
+npm install --save-dev @taqwright/taqwright@beta
 ```
 
 In `package.json` it looks like:
 
 ```json
 "devDependencies": {
-  "@taqwright/taqwright": "^0.0.25"
+  "@taqwright/taqwright": "^0.1.0-beta.0"
 }
 ```
 
