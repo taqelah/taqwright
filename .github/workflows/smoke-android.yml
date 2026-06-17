@@ -30,7 +30,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version: 26
 
       # Install the repo's deps (gives us @playwright/test to run the e2e config)
       # and the Chromium browser the codegen e2e drives.
