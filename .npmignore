@@ -1,7 +1,11 @@
 node_modules
 src
 tsconfig.json
+tsconfig.coverage.json
 tsconfig.tsbuildinfo
+coverage
+# Never ship source maps even if a coverage build left them in dist/.
+*.map
 *.log
 .DS_Store
 .env
