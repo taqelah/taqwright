@@ -74,7 +74,7 @@ If you've used Playwright, you already know Taqwright.
 
 ## Requirements
 
-- Node.js **24.x or 25.x** (Node 26+ has a known bug).
+- Node.js **24.x or newer**.
 - A booted Android emulator, iOS simulator, or connected device.
 - [Appium 3.x](https://appium.io) (`npm i -g appium@^3`) running on `localhost:4723`, with the relevant driver installed:
   - Android: `appium driver install uiautomator2`
