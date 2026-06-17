@@ -1,5 +1,5 @@
 <h1 align="center">
-  <img src="src/images/taqwright_logo.png" alt="Taqwright logo" width="120" />
+  <img src="https://raw.githubusercontent.com/taqelah/taqwright/main/src/images/taqwright_logo.png" alt="Taqwright logo" width="120" />
   <br />
   Taqwright
 </h1>
