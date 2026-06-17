@@ -83,6 +83,127 @@ describe('Mobile.getBy* factories', () => {
   });
 });
 
+describe('Mobile.getBy* factories — labels, placeholders, roles, xpath, css', () => {
+  test('getByLabel → accessibility id (both platforms)', async () => {
+    for (const p of [Platform.ANDROID, Platform.IOS]) {
+      const { findElements, cap } = findCapture();
+      const { mobile } = makeMobile(p, { findElements });
+      assert.deepEqual(await strategyOf(mobile, (m) => m.getByLabel('Submit'), cap), {
+        using: 'accessibility id',
+        value: 'Submit',
+      });
+    }
+  });
+
+  test('Android getByPlaceholder exact / non-exact → @hint xpath', async () => {
+    const exact = findCapture();
+    assert.deepEqual(
+      await strategyOf(
+        makeMobile(Platform.ANDROID, { findElements: exact.findElements }).mobile,
+        (m) => m.getByPlaceholder('Email'),
+        exact.cap,
+      ),
+      { using: 'xpath', value: "//*[@hint='Email']" },
+    );
+    const partial = findCapture();
+    assert.deepEqual(
+      await strategyOf(
+        makeMobile(Platform.ANDROID, { findElements: partial.findElements }).mobile,
+        (m) => m.getByPlaceholder('Email', { exact: false }),
+        partial.cap,
+      ),
+      { using: 'xpath', value: "//*[contains(@hint, 'Email')]" },
+    );
+  });
+
+  test('iOS getByPlaceholder → placeholderValue predicate', async () => {
+    const { findElements, cap } = findCapture();
+    const { mobile } = makeMobile(Platform.IOS, { findElements });
+    assert.deepEqual(await strategyOf(mobile, (m) => m.getByPlaceholder('Email'), cap), {
+      using: '-ios predicate string',
+      value: "placeholderValue == 'Email'",
+    });
+  });
+
+  test('getByRole maps known roles per platform and passes unknown roles through', async () => {
+    const a = findCapture();
+    assert.deepEqual(
+      await strategyOf(
+        makeMobile(Platform.ANDROID, { findElements: a.findElements }).mobile,
+        (m) => m.getByRole('button'),
+        a.cap,
+      ),
+      { using: 'class name', value: 'android.widget.Button' },
+    );
+    const i = findCapture();
+    assert.deepEqual(
+      await strategyOf(
+        makeMobile(Platform.IOS, { findElements: i.findElements }).mobile,
+        (m) => m.getByRole('button'),
+        i.cap,
+      ),
+      { using: 'class name', value: 'XCUIElementTypeButton' },
+    );
+    const unknown = findCapture();
+    assert.deepEqual(
+      await strategyOf(
+        makeMobile(Platform.ANDROID, { findElements: unknown.findElements }).mobile,
+        (m) => m.getByRole('marquee'),
+        unknown.cap,
+      ),
+      { using: 'class name', value: 'marquee' },
+    );
+  });
+
+  test('getByXpath shorthand maps type-only, @text, and @resource-id', async () => {
+    const typeOnly = findCapture();
+    assert.deepEqual(
+      await strategyOf(
+        makeMobile(Platform.ANDROID, { findElements: typeOnly.findElements }).mobile,
+        (m) => m.getByXpath('//android.widget.Button'),
+        typeOnly.cap,
+      ),
+      { using: 'class name', value: 'android.widget.Button' },
+    );
+    const text = findCapture();
+    assert.deepEqual(
+      await strategyOf(
+        makeMobile(Platform.ANDROID, { findElements: text.findElements }).mobile,
+        (m) => m.getByXpath('//android.widget.TextView[@text="Hi"]'),
+        text.cap,
+      ),
+      { using: 'xpath', value: "//*[@text='Hi']" },
+    );
+    const rid = findCapture();
+    assert.deepEqual(
+      await strategyOf(
+        makeMobile(Platform.ANDROID, { findElements: rid.findElements }).mobile,
+        (m) => m.getByXpath('//android.widget.EditText[@resource-id="com.app:id/email"]'),
+        rid.cap,
+      ),
+      { using: 'id', value: 'email' },
+    );
+  });
+
+  test('getByXpath falls through to a raw xpath when it does not match the shorthand', async () => {
+    const { findElements, cap } = findCapture();
+    const { mobile } = makeMobile(Platform.ANDROID, { findElements });
+    assert.deepEqual(await strategyOf(mobile, (m) => m.getByXpath('//*[@text="Hi"]'), cap), {
+      using: 'xpath',
+      value: '//*[@text="Hi"]',
+    });
+  });
+
+  test('getByCss → css selector verbatim', async () => {
+    const { findElements, cap } = findCapture();
+    const { mobile } = makeMobile(Platform.ANDROID, { findElements });
+    assert.deepEqual(await strategyOf(mobile, (m) => m.getByCss('a.link'), cap), {
+      using: 'css selector',
+      value: 'a.link',
+    });
+  });
+});
+
 describe('Mobile context helpers', () => {
   test('getContexts returns the driver contexts', async () => {
     const { mobile } = makeMobile(Platform.ANDROID, {

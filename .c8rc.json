@@ -1,0 +1,33 @@
+{
+  "//": "Coverage scope. Excludes the integration surface that is intentionally NOT unit-tested per CLAUDE.md — process spawning, MITM/network IO, the inspector HTTP server, toolchain installers, and the Playwright fixture lifecycle (all need a real device/network, and are exercised by the manual scaffold/emulator workflows instead). Pure-logic and fake-driver-drivable modules stay counted. excludeAfterRemap:true because coverage is remapped through source maps (dist -> src), so these globs match the original src paths.",
+  "excludeAfterRemap": true,
+  "include": ["src/**"],
+  "exclude": [
+    "test/**",
+    "src/bin/index.ts",
+    "src/bin/inspect.ts",
+    "src/bin/init.ts",
+    "src/doctor.ts",
+    "src/fixture/index.ts",
+    "src/setup/install-jdk.ts",
+    "src/setup/install-appium.ts",
+    "src/setup/install-android.ts",
+    "src/setup/index.ts",
+    "src/setup/archive.ts",
+    "src/network/proxy.ts",
+    "src/network/ca.ts",
+    "src/network/host-proxy.ts",
+    "src/network/android.ts",
+    "src/network/ios-sim.ts",
+    "src/network/index.ts",
+    "src/inspector/server.ts",
+    "src/inspector/devices.ts",
+    "src/providers/appium.ts",
+    "src/providers/cloud.ts",
+    "src/providers/local-session.ts",
+    "src/providers/browserstack/**",
+    "src/providers/lambdatest/**",
+    "src/providers/local/**",
+    "src/providers/emulator/**"
+  ]
+}
