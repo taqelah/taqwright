@@ -77,11 +77,12 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      # Emits lcov.info (the build runs first, serving as the typecheck).
+      # Builds with source maps + runs c8, which remaps coverage from the
+      # compiled dist/*.js back to the original src/*.ts → coverage/lcov.info.
       - run: npm run coverage:lcov
       - uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./lcov.info
+          files: ./coverage/lcov.info
           # A Codecov outage / missing token must not fail the pipeline.
           fail_ci_if_error: false
