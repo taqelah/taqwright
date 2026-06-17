@@ -6,7 +6,15 @@ name: Scaffold check
 #  - scaffold-and-run: end-to-end — scaffold, then let TAQWRIGHT create the AVD and
 #    run the demo login spec on that taqwright-created emulator.
 on:
+  push:
+    branches: [main]
+  pull_request:
   workflow_dispatch:
+
+# Cancel superseded runs on the same ref (e.g. rapid PR pushes).
+concurrency:
+  group: scaffold-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   init-scaffold:
@@ -70,6 +78,9 @@ jobs:
 
   scaffold-and-run:
     name: scaffold + taqwright-created AVD + run tests
+    # Heavy (45 min, real emulator, ~2GB toolchain) — manual dispatch only; the
+    # two fast jobs above run on every PR/push.
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     # Heavy: `--with-avd` pulls a managed JDK + SDK + system image (~2 GB) and the
     # emulator cold-boots inside the first test.

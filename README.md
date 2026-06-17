@@ -5,13 +5,16 @@
 </h1>
 
 <p align="center">
-  <a href="https://github.com/taqelah/taqwright/tags"><img src="https://img.shields.io/badge/version-0.0.29-blue" alt="version" /></a>
+  <a href="https://github.com/taqelah/taqwright/tags"><img src="https://img.shields.io/badge/version-0.1.0--beta.0-blue" alt="version" /></a>
+  <a href="https://www.npmjs.com/package/@taqwright/taqwright"><img src="https://img.shields.io/npm/v/@taqwright/taqwright/beta?label=npm%20beta&color=orange" alt="npm beta" /></a>
   <a href="https://www.npmjs.com/package/@taqwright/taqwright"><img src="https://img.shields.io/npm/dw/@taqwright/taqwright" alt="npm downloads" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue" alt="License: Apache 2.0" /></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.4%2B-blue?logo=typescript&logoColor=white" alt="TypeScript 5.4+" /></a>
 </p>
 
 E2E mobile UI testing on the Playwright runner, with a flat locator API on top of Appium 3.
+
+> 🧪 **Public beta.** The API is stabilizing toward 1.0 and may still change between minor versions. Install the beta with `npm i -D @taqwright/taqwright@beta`. Bug reports and feedback are very welcome — [open an issue](https://github.com/taqelah/taqwright/issues).
 
 ```ts
 import { test, expect } from '@taqwright/taqwright';
