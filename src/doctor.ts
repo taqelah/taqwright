@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { existsSync, promises as fs } from 'node:fs';
+import { homedir } from 'node:os';
 import path from 'node:path';
 import { applyManagedEnv, readManifest } from './setup/paths.js';
 import { spawnTool } from './setup/spawn-tool.js';
@@ -241,45 +242,46 @@ export async function runDoctorChecks(): Promise<DoctorCheck[]> {
   }
   checks.push(checkJavaHome());
 
-  const appium = await commandExists('appium');
-  if (!appium) {
-    checks.push({
-      name: 'Appium (test server)',
-      status: 'warn',
-      detail:
-        'not found — install with `npm i -g appium@^3` then `appium driver install uiautomator2`',
-    });
-  } else {
+  // Resolve Appium the same way the runner/inspector launch it
+  // (src/providers/appium.ts): the `appium` binary on PATH first, else
+  // `npx appium`. `which appium` alone is a false negative — e.g. with nvm,
+  // a global Appium lives under one Node version's bin and isn't on PATH when
+  // doctor runs under another. `appiumCmd` is the invocation the drivers check
+  // below reuses; undefined ⇒ no usable Appium from the active Node.
+  let appiumCmd: { cmd: string; pre: string[] } | undefined;
+  const appiumOnPath = await commandExists('appium');
+  if (appiumOnPath) {
     const version = await readCommandVersion('appium');
-    if (!version) {
-      checks.push({
-        name: 'Appium (test server)',
-        status: 'warn',
-        detail: 'on PATH but version could not be read',
-      });
+    appiumCmd = { cmd: 'appium', pre: [] };
+    checks.push(appiumServerCheck(version, 'on PATH'));
+  } else {
+    // Not on the active PATH — does `npx --no-install appium` resolve one
+    // (project-local or npx-cached)? `--no-install` is critical: doctor must
+    // never trigger a download.
+    const npxVersion = await readCommandVersion('npx', ['--no-install', 'appium']);
+    if (npxVersion) {
+      appiumCmd = { cmd: 'npx', pre: ['--no-install', 'appium'] };
+      checks.push(appiumServerCheck(npxVersion, 'via npx'));
     } else {
-      const level = classifyAppiumVersion(version);
-      if (level === 'recommended') {
-        checks.push({
-          name: 'Appium (test server)',
-          status: 'ok',
-          detail: `on PATH (v${version})`,
-        });
-      } else if (level === 'best-effort') {
+      // Flag the common nvm case: Appium is installed, just under a different
+      // Node version than the active one.
+      const elsewhere = await findAppiumUnderOtherNode();
+      if (elsewhere) {
         checks.push({
           name: 'Appium (test server)',
           status: 'warn',
           detail:
-            `Appium 2.x detected (v${version}) — best-effort, not officially tested. ` +
-            'Upgrade for the supported path: `npm i -g appium@^3`.',
+            `Appium v${elsewhere.version} is installed under Node ${elsewhere.nodeVersion}, ` +
+            `not the active Node ${process.version} — taqwright will fetch it via ` +
+            '`npx appium` on first run, or reinstall under the active Node: ' +
+            '`npm i -g appium@^3`.',
         });
       } else {
         checks.push({
           name: 'Appium (test server)',
-          status: 'error',
+          status: 'warn',
           detail:
-            `v${version} is not supported — taqwright targets Appium 3.x ` +
-            '(2.x runs best-effort). Upgrade with `npm i -g appium@^3`.',
+            'not found — install with `npm i -g appium@^3` then `appium driver install uiautomator2`',
         });
       }
     }
@@ -291,8 +293,13 @@ export async function runDoctorChecks(): Promise<DoctorCheck[]> {
   // JSON) so it survives Appium output-format changes. `warn` only when
   // *no* relevant driver is installed; a single missing one is reported
   // informationally so Android-only / iOS-only users aren't false-alarmed.
-  if (appium) {
-    const driverOut = await readCommandOutput('appium', ['driver', 'list', '--installed']);
+  if (appiumCmd) {
+    const driverOut = await readCommandOutput(appiumCmd.cmd, [
+      ...appiumCmd.pre,
+      'driver',
+      'list',
+      '--installed',
+    ]);
     if (driverOut === undefined) {
       checks.push({
         name: 'Appium drivers',
@@ -497,10 +504,17 @@ async function commandExists(name: string): Promise<boolean> {
   });
 }
 
-/** Run `<cmd> --version`, capture stdout, return the first version-shaped token. */
-async function readCommandVersion(cmd: string): Promise<string | undefined> {
+/**
+ * Run `<cmd> [...prefixArgs] --version`, capture stdout, return the first
+ * version-shaped token. `prefixArgs` lets callers probe through a launcher,
+ * e.g. `readCommandVersion('npx', ['--no-install', 'appium'])`.
+ */
+async function readCommandVersion(
+  cmd: string,
+  prefixArgs: string[] = [],
+): Promise<string | undefined> {
   return new Promise((resolve) => {
-    const child = spawnTool(cmd, ['--version'], {
+    const child = spawnTool(cmd, [...prefixArgs, '--version'], {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     let out = '';
@@ -533,6 +547,68 @@ async function readCommandOutput(cmd: string, args: string[]): Promise<string | 
     child.on('exit', () => resolve(out));
     child.on('error', () => resolve(undefined));
   });
+}
+
+/**
+ * Build the 'Appium (test server)' check from a resolved version and where it
+ * was found (`on PATH` / `via npx`). Shared by the PATH and npx branches so the
+ * 3.x/2.x/<2 thresholds stay identical. `version` is `undefined` when the
+ * binary resolved but `--version` couldn't be read.
+ */
+function appiumServerCheck(version: string | undefined, where: string): DoctorCheck {
+  const name = 'Appium (test server)';
+  if (!version) {
+    return { name, status: 'warn', detail: `${where} but version could not be read` };
+  }
+  const level = classifyAppiumVersion(version);
+  if (level === 'recommended') {
+    return { name, status: 'ok', detail: `${where} (v${version})` };
+  }
+  if (level === 'best-effort') {
+    return {
+      name,
+      status: 'warn',
+      detail:
+        `Appium 2.x detected (v${version}, ${where}) — best-effort, not officially tested. ` +
+        'Upgrade for the supported path: `npm i -g appium@^3`.',
+    };
+  }
+  return {
+    name,
+    status: 'error',
+    detail:
+      `v${version} is not supported (${where}) — taqwright targets Appium 3.x ` +
+      '(2.x runs best-effort). Upgrade with `npm i -g appium@^3`.',
+  };
+}
+
+/**
+ * Find an Appium installed under a *different* nvm Node version than the active
+ * one — the usual reason `which appium` fails while Appium is in fact present
+ * (nvm globals are per-Node-version). Scans `$NVM_DIR/versions/node/<v>/bin/
+ * appium`, skipping the active `process.version`, and returns the first match
+ * with its version. Returns `undefined` when nvm isn't in use or nothing is
+ * found; non-nvm globals are already on PATH and handled by the PATH branch.
+ */
+async function findAppiumUnderOtherNode(): Promise<
+  { version: string; nodeVersion: string } | undefined
+> {
+  const nvmDir = process.env.NVM_DIR ?? path.join(homedir(), '.nvm');
+  const versionsDir = path.join(nvmDir, 'versions', 'node');
+  let entries: string[];
+  try {
+    entries = await fs.readdir(versionsDir);
+  } catch {
+    return undefined;
+  }
+  for (const nodeVersion of entries) {
+    if (nodeVersion === process.version) continue;
+    const bin = path.join(versionsDir, nodeVersion, 'bin', 'appium');
+    if (!existsSync(bin)) continue;
+    const version = await readCommandVersion(bin);
+    if (version) return { version, nodeVersion };
+  }
+  return undefined;
 }
 
 /**
