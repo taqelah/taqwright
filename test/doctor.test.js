@@ -81,7 +81,7 @@ describe('isAppiumVersionSupported', () => {
 });
 
 describe('isNodeVersionSupported', () => {
-  test('24.x and 25.x → true (with or without leading v)', () => {
+  test('24+ → true (with or without leading v)', () => {
     assert.equal(isNodeVersionSupported('24.0.0'), true);
     assert.equal(isNodeVersionSupported('v24.15.0'), true);
     assert.equal(isNodeVersionSupported('25.0.0'), true);
@@ -91,10 +91,10 @@ describe('isNodeVersionSupported', () => {
     assert.equal(isNodeVersionSupported('22.12.0'), false);
     assert.equal(isNodeVersionSupported('v20.10.0'), false);
   });
-  test('26+ → false (Node 26 has a known bug)', () => {
-    assert.equal(isNodeVersionSupported('26.0.0'), false);
-    assert.equal(isNodeVersionSupported('v26.1.0'), false);
-    assert.equal(isNodeVersionSupported('30.1.0'), false);
+  test('26+ → true (no upper bound)', () => {
+    assert.equal(isNodeVersionSupported('26.0.0'), true);
+    assert.equal(isNodeVersionSupported('v26.1.0'), true);
+    assert.equal(isNodeVersionSupported('30.1.0'), true);
   });
   test('unparseable → false', () => {
     assert.equal(isNodeVersionSupported(''), false);

@@ -41,8 +41,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Match engines (>=24 <26) so a 25-only regression can't slip through.
-        node: [24, 25]
+        # Match engines (>=24, no upper bound) so a version-specific regression
+        # can't slip through.
+        node: [24, 25, 26]
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
