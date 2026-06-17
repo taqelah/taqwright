@@ -13,6 +13,7 @@ import {
 import { getUseOptions, loadTaqwrightConfig } from '../config.js';
 import { resolvedPoolEnvKey } from '../discovery.js';
 import { appiumRemoteOptions } from '../capabilities.js';
+import { ensurePlainGlobalDispatcher } from '../undici-dispatcher.js';
 import { isPortOpen } from '../auto-appium.js';
 import { startAppiumServer } from '../providers/appium.js';
 import {
@@ -128,7 +129,10 @@ async function withDeviceReadyRetry<T>(
  * single `newSession` — behaviour is unchanged there.
  */
 async function createLocalSession(use: TaqwrightUseOptions): Promise<WebDriverClient> {
-  const newSession = () => WebDriver.newSession(appiumRemoteOptions(use));
+  const newSession = () => {
+    ensurePlainGlobalDispatcher();
+    return WebDriver.newSession(appiumRemoteOptions(use));
+  };
   const serial = await localAndroidSerial(use);
   if (!serial) {
     // No resolved serial → about to cold-boot (or non-resolvable). For a named
