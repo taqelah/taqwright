@@ -756,11 +756,9 @@ function packageJsonTemplate(name: string): string {
       typescript: '^5.4.0',
     },
     engines: {
-      // Pin to Node 24.x–25.x: taqwright runs in the consumer project (the
-      // `taqwright test` runtime), and Node 26+ has a known bug that breaks it.
-      // The upper bound is intentional — accept the `npm install` engine
-      // warnings on out-of-range runtimes over silently running on a broken one.
-      node: '>=24.0.0 <26.0.0',
+      // Require Node 24 or newer: taqwright runs in the consumer project (the
+      // `taqwright test` runtime). Minimum 24, no upper bound.
+      node: '>=24.0.0',
     },
     // @wdio/config (a transitive dep via webdriver) still pins the deprecated
     // glob@10; taqwright never uses its glob-based spec resolution (Playwright is
