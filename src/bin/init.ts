@@ -842,11 +842,12 @@ export default defineConfig({
   projects: [
 ${projects},
 
-    // ─── Cloud examples (BrowserStack / LambdaTest) ─────────────────
+    // ─── Cloud examples (BrowserStack / LambdaTest / Digital.ai) ────
     // Uncomment a block below to add a cloud project. Set the matching
     // env vars before launching:
-    //   BROWSERSTACK_USERNAME / BROWSERSTACK_ACCESS_KEY
-    //   LAMBDATEST_USERNAME    / LAMBDATEST_ACCESS_KEY
+    //   BROWSERSTACK_USERNAME  / BROWSERSTACK_ACCESS_KEY
+    //   LAMBDATEST_USERNAME     / LAMBDATEST_ACCESS_KEY
+    //   DIGITALAI_CLOUD_SERVER  / DIGITALAI_ACCESS_KEY   (no username)
     // For now, cloud devices are wired through the inspector
     // ('taqwright inspect'); cloud test-runner support lands separately.
     //
@@ -877,6 +878,23 @@ ${projects},
     //     resetBetweenTests: true,
     //     buildPath: 'lt://<app-id-from-app-upload>',
     //     appBundleId: 'com.example.MyApp',
+    //   },
+    // },
+    // {
+    //   name: 'digitalai',
+    //   use: {
+    //     platform: Platform.ANDROID,
+    //     device: {
+    //       provider: 'digitalai',
+    //       name: 'Galaxy S24',
+    //       osVersion: '14',
+    //       // deviceQuery: "@os='android' and @category='PHONE'", // optional: raw selection query (overrides name/osVersion)
+    //     },
+    //     resetBetweenTests: true,
+    //     // A local .apk/.ipa is uploaded automatically, or pass 'cloud:com.example.app'
+    //     // if the build is already in your Digital.ai cloud.
+    //     buildPath: '/absolute/path/to/app.apk',
+    //     appBundleId: 'com.example.app',
     //   },
     // },
   ],

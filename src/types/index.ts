@@ -113,11 +113,22 @@ export interface LambdaTestDeviceConfig extends CloudDeviceConfigBase {
   provider: 'lambdatest';
 }
 
+export interface DigitalAiDeviceConfig extends CloudDeviceConfigBase {
+  provider: 'digitalai';
+  /**
+   * Raw Digital.ai device-selection query, e.g.
+   * `"@os='android' and @category='PHONE'"`. When set it overrides the query
+   * derived from `name` / `osVersion`.
+   */
+  deviceQuery?: string;
+}
+
 export type DeviceConfig =
   | EmulatorDeviceConfig
   | LocalDeviceConfig
   | BrowserStackDeviceConfig
-  | LambdaTestDeviceConfig;
+  | LambdaTestDeviceConfig
+  | DigitalAiDeviceConfig;
 
 /**
  * A single device entry from a cloud grid's catalog (BrowserStack / LambdaTest).
@@ -132,6 +143,14 @@ export interface CloudDevice {
   deviceName: string;
   osVersion: string;
   realDevice: boolean;
+  /**
+   * Connectable right now. Set by grids with live per-device status (e.g.
+   * Digital.ai's real hardware fleet); omitted by on-demand grids
+   * (BrowserStack/LambdaTest), where the UI treats `undefined` as available.
+   */
+  available?: boolean;
+  /** Human-readable status for display on non-available tiles (e.g. "In Use"). */
+  status?: string;
 }
 
 /** Live session returned by a `DeviceProvider`. */

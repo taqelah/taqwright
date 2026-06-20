@@ -47,9 +47,9 @@ for (const spec of CLOUD_SPECS) {
       assert.ok(getProviderClass(spec.provider));
     });
 
-    test('credentialEnv is a 2-tuple of non-empty var names', () => {
+    test('credentialEnv is a 1- or 2-tuple of non-empty var names', () => {
       assert.ok(Array.isArray(spec.credentialEnv));
-      assert.equal(spec.credentialEnv.length, 2);
+      assert.ok(spec.credentialEnv.length === 1 || spec.credentialEnv.length === 2);
       assert.ok(spec.credentialEnv.every(isNonEmptyString));
     });
 
@@ -57,22 +57,36 @@ for (const spec of CLOUD_SPECS) {
       assert.ok(isNonEmptyString(spec.prebuiltScheme));
       assert.equal(typeof spec.appUrlEnvVar, 'function');
       assert.ok(isNonEmptyString(spec.appUrlEnvVar('proj')));
-      assert.ok(isNonEmptyString(spec.upload?.endpoint));
+      // Tenant-hosted grids (Digital.ai) resolve the endpoint from a function
+      // of `buildPath`, reading their cloud-server env var.
+      if (spec.tenantUrlEnvVar) process.env[spec.tenantUrlEnvVar] = 'https://tenant.example.com';
+      const endpoint =
+        typeof spec.upload?.endpoint === 'function'
+          ? spec.upload.endpoint('build.apk')
+          : spec.upload?.endpoint;
+      assert.ok(isNonEmptyString(endpoint));
       assert.equal(typeof spec.upload.urlBody, 'function');
       assert.equal(typeof spec.upload.fileBody, 'function');
     });
 
-    test('hub connection is fully specified', () => {
-      assert.ok(isNonEmptyString(spec.hub?.hostname));
-      assert.equal(typeof spec.hub.port, 'number');
-      assert.ok(isNonEmptyString(spec.hub.path));
-      assert.equal(spec.hub.protocol, 'https');
+    test('hub connection is fully specified (static object, or resolved from a function)', () => {
+      // Tenant-hosted grids (Digital.ai) resolve the hub from an env var, so
+      // set one before calling a function-form hub.
+      if (spec.tenantUrlEnvVar) process.env[spec.tenantUrlEnvVar] = 'https://tenant.example.com';
+      const hub = typeof spec.hub === 'function' ? spec.hub(/** @type {any} */ ({})) : spec.hub;
+      assert.ok(isNonEmptyString(hub?.hostname));
+      assert.equal(typeof hub.port, 'number');
+      assert.ok(isNonEmptyString(hub.path));
+      assert.equal(hub.protocol, 'https');
     });
 
-    test('caps + status-sync builders are functions', () => {
+    test('caps builder is a function; exactly one status-reporting mechanism is present', () => {
       assert.equal(typeof spec.buildCapabilities, 'function');
-      assert.equal(typeof spec.syncRequest, 'function');
       assert.equal(typeof spec.strictSync, 'boolean');
+      assert.ok(
+        typeof spec.syncRequest === 'function' || typeof spec.reportStatusCommand === 'function',
+        'a CloudSpec must report status via `syncRequest` (REST) or `reportStatusCommand` (in-test command)',
+      );
     });
 
     test('permissionCapKeys is a non-empty array of strings', () => {
@@ -82,6 +96,8 @@ for (const spec of CLOUD_SPECS) {
     });
 
     test('catalog lists a URL and parses to a device array', () => {
+      // Tenant-hosted grids (Digital.ai) resolve the list URL from an env var.
+      if (spec.tenantUrlEnvVar) process.env[spec.tenantUrlEnvVar] = 'https://tenant.example.com';
       assert.equal(typeof spec.catalog?.listUrl, 'function');
       assert.ok(isNonEmptyString(spec.catalog.listUrl()));
       assert.equal(typeof spec.catalog.parseDevices, 'function');
