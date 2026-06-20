@@ -3,11 +3,13 @@ import { EmulatorProvider } from './emulator/index.js';
 import { LocalDeviceProvider } from './local/index.js';
 import { BrowserStackDeviceProvider } from './browserstack/index.js';
 import { LambdaTestDeviceProvider } from './lambdatest/index.js';
+import { DigitalAiDeviceProvider } from './digitalai/index.js';
 
 export { EmulatorProvider } from './emulator/index.js';
 export { LocalDeviceProvider } from './local/index.js';
 export { BrowserStackDeviceProvider } from './browserstack/index.js';
 export { LambdaTestDeviceProvider } from './lambdatest/index.js';
+export { DigitalAiDeviceProvider } from './digitalai/index.js';
 export type { DeviceHandle } from '../types/index.js';
 
 // Every provider is constructed the same way; cloud providers also take the
@@ -26,10 +28,11 @@ const REGISTRY: Record<string, ProviderConstructor> = {
   'local-device': LocalDeviceProvider,
   browserstack: BrowserStackDeviceProvider,
   lambdatest: LambdaTestDeviceProvider,
+  digitalai: DigitalAiDeviceProvider,
 };
 
 // Registry keys that run on a remote grid (no local Appium server, no pool).
-const CLOUD_PROVIDERS = new Set<string>(['browserstack', 'lambdatest']);
+const CLOUD_PROVIDERS = new Set<string>(['browserstack', 'lambdatest', 'digitalai']);
 
 /** True for providers that run on a remote cloud grid. */
 export function isCloudProvider(provider: string | undefined): boolean {

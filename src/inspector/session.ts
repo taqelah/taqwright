@@ -82,14 +82,19 @@ export interface InspectorDefaults {
  * classes the test runner uses can be reused verbatim by the inspector.
  */
 export interface CloudConnectRequest {
-  provider: 'browserstack' | 'lambdatest';
+  provider: 'browserstack' | 'lambdatest' | 'digitalai';
+  /** Username — empty for Digital.ai (bearer access-key auth, no username). */
   user: string;
   key: string;
+  /** Digital.ai tenant cloud server URL (e.g. `https://mycloud.experitest.com`). */
+  cloudServer?: string;
   platform: 'android' | 'ios';
   deviceName: string;
   osVersion: string;
   orientation?: DeviceOrientation;
-  /** Already-uploaded build, e.g. `bs://…` or `lt://…`. Required. */
+  /** Raw Digital.ai device-selection query (overrides deviceName/osVersion). */
+  deviceQuery?: string;
+  /** Already-uploaded build, e.g. `bs://…`, `lt://…`, or `cloud:<bundleId>`. Required. */
   appUrl: string;
   appBundleId?: string;
   /** Extra capabilities merged on top of the provider's defaults. */
@@ -354,11 +359,19 @@ export class InspectorSession {
    * status reporting.
    */
   private async connectCloud(cloud: CloudConnectRequest): Promise<void> {
-    if (!cloud.appUrl) {
-      throw new Error('Cloud connect requires an app URL (bs://… or lt://…).');
-    }
-    if (!cloud.user || !cloud.key) {
-      throw new Error(`${cloud.provider} username + access key are required.`);
+    if (cloud.provider === 'digitalai') {
+      // Digital.ai uses a bearer access key (no username) + a tenant cloud URL.
+      // The app is OPTIONAL — with no app the session attaches to the device;
+      // with one, pass `cloud:<bundleId>` (and the matching bundle id below).
+      if (!cloud.key) throw new Error('Digital.ai requires an access key.');
+      if (!cloud.cloudServer) throw new Error('Digital.ai requires a cloud server URL.');
+    } else {
+      if (!cloud.appUrl) {
+        throw new Error('Cloud connect requires an app URL (bs://… or lt://…).');
+      }
+      if (!cloud.user || !cloud.key) {
+        throw new Error(`${cloud.provider} username + access key are required.`);
+      }
     }
     // Provider classes read credentials from process.env. Set them for
     // the duration of this connect; they get cleared on disconnect so
@@ -366,9 +379,12 @@ export class InspectorSession {
     if (cloud.provider === 'browserstack') {
       process.env.BROWSERSTACK_USERNAME = cloud.user;
       process.env.BROWSERSTACK_ACCESS_KEY = cloud.key;
-    } else {
+    } else if (cloud.provider === 'lambdatest') {
       process.env.LAMBDATEST_USERNAME = cloud.user;
       process.env.LAMBDATEST_ACCESS_KEY = cloud.key;
+    } else {
+      process.env.DIGITALAI_ACCESS_KEY = cloud.key;
+      process.env.DIGITALAI_CLOUD_SERVER = cloud.cloudServer as string;
     }
     const platform = cloud.platform === 'ios' ? Platform.IOS : Platform.ANDROID;
     // Codegen is interactive: unlike `taqwright test`, don't auto-accept
@@ -380,6 +396,9 @@ export class InspectorSession {
     // form from the local config, so a cloud selection can carry them in; they'd
     // be wrong on a cloud provider (which picks the device by name + version).
     const userCloudCaps = omitLocalEmulatorCaps(cloud.capabilities ?? {});
+    // BrowserStack reads appium:-prefixed caps directly; LambdaTest + Digital.ai
+    // take bare keys and relocate them into their vendor block (lt:options /
+    // appium:options) in their own buildCapabilities.
     const permKeys =
       cloud.provider === 'browserstack'
         ? ['appium:autoGrantPermissions', 'appium:autoAcceptAlerts']
@@ -395,6 +414,7 @@ export class InspectorSession {
         name: cloud.deviceName,
         osVersion: cloud.osVersion,
         orientation: cloud.orientation ?? 'portrait',
+        ...(cloud.deviceQuery ? { deviceQuery: cloud.deviceQuery } : {}),
       },
       buildPath: cloud.appUrl,
       appBundleId: cloud.appBundleId,
