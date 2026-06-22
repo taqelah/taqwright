@@ -376,17 +376,23 @@ async function handle(
         user: process.env.LAMBDATEST_USERNAME ?? '',
         key: process.env.LAMBDATEST_ACCESS_KEY ?? '',
       },
+      digitalai: {
+        // Digital.ai has no username — just the access key + tenant cloud URL.
+        key: process.env.DIGITALAI_ACCESS_KEY ?? '',
+        cloudServer: process.env.DIGITALAI_CLOUD_SERVER ?? '',
+      },
     });
     return;
   }
   if (method === 'POST' && url === '/api/cloud/devices') {
     const body = await readJson<{
-      provider: 'browserstack' | 'lambdatest';
+      provider: 'browserstack' | 'lambdatest' | 'digitalai';
       user: string;
       key: string;
+      cloudServer?: string;
     }>(req);
     try {
-      const devices = await fetchCloudDevices(body.provider, body.user, body.key);
+      const devices = await fetchCloudDevices(body.provider, body.user, body.key, body.cloudServer);
       json(res, 200, { ok: true, devices });
     } catch (err) {
       json(res, 400, { ok: false, error: (err as Error).message });
@@ -1439,11 +1445,67 @@ async function exportScriptToProject(
 
 // ─── Cloud device-catalog fetching ─────────────────────────────
 export interface CloudDevice {
-  provider: 'browserstack' | 'lambdatest';
+  provider: 'browserstack' | 'lambdatest' | 'digitalai';
   platform: 'android' | 'ios';
   deviceName: string;
   osVersion: string;
   realDevice: boolean;
+  /**
+   * Connectable right now. Only set by Digital.ai (real hardware with live
+   * status); omitted by the on-demand grids (BrowserStack/LambdaTest), where the
+   * UI treats `undefined` as available. Only `Available`/online is connectable.
+   */
+  available?: boolean;
+  /** Human-readable status for display on non-available tiles (e.g. "In Use"). */
+  status?: string;
+}
+
+/** Device statuses Digital.ai reports as connectable (online + free). */
+const DIGITALAI_AVAILABLE_STATUSES = ['available', 'online'];
+
+/**
+ * Parse Digital.ai's `GET /api/v1/devices` response into CloudDevices. The list
+ * lives under `data` (`{ status, data: [...], code }`); per-device fields are
+ * `deviceName`/`modelName`/`model`, `deviceOs`/`os`, `osVersion`, `isEmulator`,
+ * and `displayStatus`/`currentStatus`.
+ *
+ * Unlike on-demand grids (BrowserStack/LambdaTest), Digital.ai devices are real
+ * hardware with live status. ALL devices are returned (so the picker shows the
+ * full fleet), but each carries `available` — only `Available`/online devices
+ * are connectable; In-Use/Offline are shown greyed-out and unselectable. When
+ * status is absent it's treated as available, to stay tolerant of shape changes.
+ * Shape-tolerant; pure; exported for testing.
+ */
+export function parseDigitalaiDevices(raw: unknown): CloudDevice[] {
+  const r = (raw ?? {}) as Record<string, unknown>;
+  const arr: unknown[] = Array.isArray(raw)
+    ? raw
+    : Array.isArray(r.data)
+      ? (r.data as unknown[])
+      : Array.isArray(r.devices)
+        ? (r.devices as unknown[])
+        : [];
+  const devices: CloudDevice[] = [];
+  for (const item of arr) {
+    const d = item as Record<string, unknown>;
+    const name = d.deviceName ?? d.modelName ?? d.model ?? d.name;
+    if (!name) continue;
+    const os = String(d.deviceOs ?? d.os ?? d.osType ?? d.platform ?? '');
+    const version = d.osVersion ?? d.version ?? d.platformVersion;
+    const rawStatus = String(d.displayStatus ?? d.currentStatus ?? '');
+    const lower = rawStatus.toLowerCase();
+    const available = lower === '' || DIGITALAI_AVAILABLE_STATUSES.includes(lower);
+    devices.push({
+      provider: 'digitalai',
+      platform: os.toLowerCase().includes('ios') ? 'ios' : 'android',
+      deviceName: String(name),
+      osVersion: version != null ? String(version) : '',
+      realDevice: d.isEmulator === true ? false : true,
+      available,
+      ...(rawStatus ? { status: rawStatus } : {}),
+    });
+  }
+  return devices;
 }
 
 /**
@@ -1480,10 +1542,43 @@ export function parseLambdatestDevices(raw: unknown): CloudDevice[] {
 }
 
 async function fetchCloudDevices(
-  provider: 'browserstack' | 'lambdatest',
+  provider: 'browserstack' | 'lambdatest' | 'digitalai',
   user: string,
   key: string,
+  cloudServer?: string,
 ): Promise<CloudDevice[]> {
+  // Digital.ai authenticates with a bearer access key against the tenant cloud
+  // server — no username, a configurable host.
+  if (provider === 'digitalai') {
+    if (!key) throw new Error('Digital.ai access key is required.');
+    if (!cloudServer) throw new Error('Digital.ai cloud server URL is required.');
+    const origin = new URL(
+      /^https?:\/\//.test(cloudServer) ? cloudServer : `https://${cloudServer}`,
+    ).origin;
+    const r = await fetch(`${origin}/api/v1/devices`, {
+      headers: { Authorization: `Bearer ${key}` },
+    });
+    if (!r.ok) {
+      throw new Error(`Digital.ai devices API returned ${r.status} — check the URL + access key.`);
+    }
+    const raw = await r.json();
+    const devices = parseDigitalaiDevices(raw);
+    if (devices.length === 0) {
+      const keys =
+        raw && typeof raw === 'object' && !Array.isArray(raw)
+          ? Object.keys(raw as object).join(', ')
+          : typeof raw;
+      console.error(
+        '[taqwright] Digital.ai device list — unrecognized response:',
+        JSON.stringify(raw).slice(0, 800),
+      );
+      throw new Error(
+        `Digital.ai returned 200 but no devices could be parsed (top-level: ${keys}). ` +
+          'Check the inspector server logs for the raw response.',
+      );
+    }
+    return devices;
+  }
   if (!user || !key) {
     throw new Error(`${provider} username + access key are required.`);
   }

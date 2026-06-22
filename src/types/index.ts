@@ -108,11 +108,22 @@ export interface LambdaTestDeviceConfig extends CloudDeviceConfigBase {
   provider: 'lambdatest';
 }
 
+export interface DigitalAiDeviceConfig extends CloudDeviceConfigBase {
+  provider: 'digitalai';
+  /**
+   * Raw Digital.ai device-selection query, e.g.
+   * `"@os='android' and @category='PHONE'"`. When set it overrides the query
+   * derived from `name` / `osVersion`.
+   */
+  deviceQuery?: string;
+}
+
 export type DeviceConfig =
   | EmulatorDeviceConfig
   | LocalDeviceConfig
   | BrowserStackDeviceConfig
-  | LambdaTestDeviceConfig;
+  | LambdaTestDeviceConfig
+  | DigitalAiDeviceConfig;
 
 /** Live session returned by a `DeviceProvider`. */
 export interface DeviceHandle {
