@@ -18,44 +18,84 @@ function sendKeySpy() {
   };
 }
 
+// A stateful editable field. `mode` decides how send-keys mutates it —
+// 'append' (iOS / WebView / Flutter) or 'replace' (standard UiAutomator2
+// setText). `mask` reports the value as bullets of the right length, mimicking
+// an Android password field (the value is never readable, only its length).
+// pressSequentially picks its strategy by probing this behaviour, so asserting
+// the *resulting* value is the real regression test for issue #76.
+function makeField({ mode, mask = false } = {}) {
+  let value = '';
+  const driver = {
+    elementClick: async () => {},
+    elementClear: async () => {
+      value = '';
+    },
+    elementSendKeys: async (_id, text) => {
+      value = mode === 'append' ? value + text : text;
+    },
+    getElementAttribute: async (_id, name) =>
+      name === 'text' ? (mask ? '•'.repeat(value.length) : value) : null,
+    getElementText: async () => (mask ? '•'.repeat(value.length) : value),
+  };
+  return {
+    driver,
+    get value() {
+      return value;
+    },
+  };
+}
+
 describe('Locator.pressSequentially', () => {
-  test('Android native sends the GROWING PREFIX (UiAutomator2 setText replaces)', async () => {
-    const spy = sendKeySpy();
+  test('Android native standard field — replace path yields the exact text', async () => {
+    const field = makeField({ mode: 'replace' });
     const { el: loc } = makeLocator(
       { platform: Platform.ANDROID },
-      { getAppiumContext: async () => 'NATIVE_APP', elementSendKeys: spy.fn },
+      { getAppiumContext: async () => 'NATIVE_APP', ...field.driver },
     );
     await loc.pressSequentially('abc');
-    assert.deepEqual(
-      spy.calls.map((c) => c.text),
-      ['a', 'ab', 'abc'],
-    );
+    assert.equal(field.value, 'abc');
   });
 
-  test('Android WebView sends ONE CHAR at a time (chromedriver appends)', async () => {
-    const spy = sendKeySpy();
+  test('Android native Flutter/append field — no duplication (issue #76)', async () => {
+    const field = makeField({ mode: 'append' });
     const { el: loc } = makeLocator(
       { platform: Platform.ANDROID },
-      { getAppiumContext: async () => 'WEBVIEW_com.x', elementSendKeys: spy.fn },
+      { getAppiumContext: async () => 'NATIVE_APP', ...field.driver },
     );
-    await loc.pressSequentially('abc');
-    assert.deepEqual(
-      spy.calls.map((c) => c.text),
-      ['a', 'b', 'c'],
-    );
+    await loc.pressSequentially('hello');
+    // The bug produced 'hhehelhellhello'; the fix must yield exactly 'hello'.
+    assert.equal(field.value, 'hello');
   });
 
-  test('iOS sends one char at a time', async () => {
-    const spy = sendKeySpy();
+  test('Android native masked password field — append detected via length', async () => {
+    const field = makeField({ mode: 'append', mask: true });
+    const { el: loc } = makeLocator(
+      { platform: Platform.ANDROID },
+      { getAppiumContext: async () => 'NATIVE_APP', ...field.driver },
+    );
+    await loc.pressSequentially('10203040');
+    assert.equal(field.value, '10203040');
+  });
+
+  test('Android WebView — append path yields the exact text', async () => {
+    const field = makeField({ mode: 'append' });
+    const { el: loc } = makeLocator(
+      { platform: Platform.ANDROID },
+      { getAppiumContext: async () => 'WEBVIEW_com.x', ...field.driver },
+    );
+    await loc.pressSequentially('abc');
+    assert.equal(field.value, 'abc');
+  });
+
+  test('iOS — append path yields the exact text', async () => {
+    const field = makeField({ mode: 'append' });
     const { el: loc } = makeLocator(
       { platform: Platform.IOS },
-      { getAppiumContext: async () => 'NATIVE_APP', elementSendKeys: spy.fn },
+      { getAppiumContext: async () => 'NATIVE_APP', ...field.driver },
     );
     await loc.pressSequentially('xy');
-    assert.deepEqual(
-      spy.calls.map((c) => c.text),
-      ['x', 'y'],
-    );
+    assert.equal(field.value, 'xy');
   });
 });
 

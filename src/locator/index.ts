@@ -773,19 +773,59 @@ export class Locator {
     await this.ctx.driver.elementClick(id).catch(() => {});
     const delay = opts?.delay ?? 0;
 
-    // Android native (UiAutomator2) send-keys does a setText that REPLACES the
-    // field, so char-by-char would wipe each previous char — send the growing
-    // prefix instead. iOS and any WebView (chromedriver) append, so one char at
-    // a time fires per-keystroke handlers correctly there.
+    // To type char-by-char we must know whether each send-keys APPENDS to the
+    // field or REPLACES it:
+    //   • iOS and Android WebView (chromedriver) APPEND  → send one char at a
+    //     time (each keystroke fires the app's per-char handlers).
+    //   • Standard Android native (UiAutomator2) does a setText that REPLACES,
+    //     so single chars would wipe each previous one → send the growing
+    //     prefix ("h","he","hel").
+    //   • Flutter (and other apps that drive their own text editor) report as
+    //     plain android.widget.EditText yet APPEND like a WebView — the prefix
+    //     would then duplicate into "hhehel…" (issue #76).
+    // Flutter is indistinguishable from standard native in the page source, so
+    // probe the field's actual behaviour rather than guess from the platform.
     const ctx = await this.ctx.driver.getAppiumContext().catch(() => 'NATIVE_APP');
-    const replaces = this.ctx.platform === Platform.ANDROID && String(ctx) === 'NATIVE_APP';
+    const androidNative = this.ctx.platform === Platform.ANDROID && String(ctx) === 'NATIVE_APP';
+    const appends =
+      !androidNative || (text.length > 0 && (await this.detectSendKeysAppends(id, text[0])));
 
     let acc = '';
     for (const ch of text) {
       acc += ch;
-      await this.ctx.driver.elementSendKeys(id, replaces ? acc : ch);
+      await this.ctx.driver.elementSendKeys(id, appends ? ch : acc);
       if (delay > 0) await sleep(delay);
     }
+  }
+
+  /**
+   * Probe whether Android-native send-keys APPENDS or REPLACES on this field.
+   * Send the same char twice via separate calls: a replacing field (standard
+   * UiAutomator2 setText) stays length 1, an appending field (Flutter et al.)
+   * grows to length 2. Length is read from the possibly-masked `text`
+   * attribute, so password fields — which report their value as bullet chars of
+   * the right length — are handled without ever reading the secret. The field
+   * is cleared before and after so the probe leaves no residue. Any failure
+   * defaults to REPLACE (the long-standing standard-native behaviour).
+   */
+  private async detectSendKeysAppends(id: string, probeChar: string): Promise<boolean> {
+    try {
+      await this.ctx.driver.elementClear(id);
+      await this.ctx.driver.elementSendKeys(id, probeChar);
+      await this.ctx.driver.elementSendKeys(id, probeChar);
+      const len = await this.readValueLength(id);
+      await this.ctx.driver.elementClear(id).catch(() => {});
+      return len >= 2;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Length of the field's current (possibly masked) value, 0 if unreadable. */
+  private async readValueLength(id: string): Promise<number> {
+    const attr = await this.ctx.driver.getElementAttribute(id, 'text').catch(() => null);
+    const text = attr ?? (await this.ctx.driver.getElementText(id).catch(() => ''));
+    return typeof text === 'string' ? text.length : 0;
   }
 
   // ─── Native pickers ────────────────────────────────────────────────
