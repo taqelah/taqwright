@@ -5,7 +5,7 @@
 </h1>
 
 <p align="center">
-  <a href="https://github.com/taqelah/taqwright/tags"><img src="https://img.shields.io/badge/version-0.1.0--beta.1-blue" alt="version" /></a>
+  <a href="https://github.com/taqelah/taqwright/tags"><img src="https://img.shields.io/badge/version-0.1.0--beta.2-blue" alt="version" /></a>
   <a href="https://www.npmjs.com/package/@taqwright/taqwright"><img src="https://img.shields.io/npm/v/@taqwright/taqwright/beta?label=npm%20beta&color=orange" alt="npm beta" /></a>
   <a href="https://www.npmjs.com/package/@taqwright/taqwright"><img src="https://img.shields.io/npm/dw/@taqwright/taqwright" alt="npm downloads" /></a>
   <a href="https://github.com/taqelah/taqwright/actions/workflows/ci.yml"><img src="https://github.com/taqelah/taqwright/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
