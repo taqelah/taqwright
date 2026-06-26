@@ -729,14 +729,27 @@ type LocatorActionResult = {
   actual?: string;
 };
 
-type ScreenActionBody = {
-  kind: 'scroll';
-  direction: SwipeDirection;
-  fromX?: number;
-  toX?: number;
-  fromY?: number;
-  toY?: number;
-};
+type ScreenActionBody =
+  | {
+      kind: 'scroll';
+      direction: SwipeDirection;
+      fromX?: number;
+      toX?: number;
+      fromY?: number;
+      toY?: number;
+    }
+  | {
+      // A literal point-to-point drag along an exact line the user picked on the
+      // screenshot. All four values are fractions (0..1) of the device window, so
+      // the recorded gesture stays correct across screen resolutions. `direction`
+      // only labels the recorded `mobile.scroll(dir, …)` — the path is literal.
+      kind: 'coordScroll';
+      direction: SwipeDirection;
+      fromX: number;
+      fromY: number;
+      toX: number;
+      toY: number;
+    };
 
 /**
  * Pull the `LocatorDescriptor` out of the body — prefers the new `descriptor`
@@ -1166,6 +1179,23 @@ async function runScreenAction(
         await swipe(driver, fX, fY, tX, tY, 300);
       }
       session.recordIf({ kind: 'screenScroll', direction: dir, fromX, toX, fromY, toY });
+      return;
+    }
+    case 'coordScroll': {
+      // Literal point-to-point drag along the exact line the user picked. Unlike
+      // 'scroll' (a region-based native fling), this honors the precise path so
+      // the live preview matches the recorded `mobile.scroll(dir, { from, to })`.
+      const rect = await driver.getWindowRect();
+      const { direction, fromX, fromY, toX, toY } = body;
+      const fX = Math.floor(rect.width * fromX);
+      const fY = Math.floor(rect.height * fromY);
+      const tX = Math.floor(rect.width * toX);
+      const tY = Math.floor(rect.height * toY);
+      await swipe(driver, fX, fY, tX, tY, 300);
+      // Record as a screenScroll with both from/to fractions — its renderer emits
+      // `await mobile.scroll(dir, { from, to })`, which replays the exact path
+      // (Mobile.swipe does a literal point-to-point gesture when from+to are set).
+      session.recordIf({ kind: 'screenScroll', direction, fromX, toX, fromY, toY });
       return;
     }
   }
