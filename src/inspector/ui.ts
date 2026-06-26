@@ -45,6 +45,9 @@ export const INSPECTOR_HTML = `<!doctype html>
   header h1 { font-size: 14px; font-weight: 600; margin: 0; letter-spacing: -0.01em;
     color: var(--text); }
   header h1 .brand { color: var(--accent); font-weight: 700; }
+  header .version-badge { font-family: var(--mono); font-size: 11px; font-weight: 600;
+    color: var(--text-dim); background: var(--bg); border: 1px solid var(--border);
+    border-radius: 999px; padding: 1px 7px; flex-shrink: 0; }
   header .dot { color: var(--text-muted); margin: 0 4px; }
   header .meta { color: var(--text-dim); font-size: 12px; font-family: var(--mono); }
   header .spacer { flex: 1; }
@@ -998,6 +1001,7 @@ export const INSPECTOR_HTML = `<!doctype html>
 <header>
   <img class="logo" src="/static/logo.png" alt="taqwright" />
   <h1><span class="brand">taqwright</span> codegen</h1>
+  <span class="version-badge" id="app-version" title="taqwright version">v__TAQWRIGHT_VERSION__</span>
   <span class="dot">·</span>
   <span class="meta" id="session-meta">setup</span>
   <span class="spacer"></span>
