@@ -448,6 +448,11 @@ export const INSPECTOR_HTML = `<!doctype html>
   #highlight { position: absolute; border: 2px solid var(--accent);
     background: rgba(9,105,218,0.12); box-shadow: 0 0 0 9999px rgba(0,0,0,0.40) inset;
     pointer-events: none; transition: all 0.12s ease-out; }
+  #scroll-guide { position: absolute; width: 2px; top: 0; bottom: 0;
+    background: #0969da; pointer-events: none; z-index: 4; }
+  #scroll-guide .scroll-guide-dot { position: absolute; left: 50%; width: 12px; height: 12px;
+    margin-left: -6px; margin-top: -6px; border-radius: 50%; background: #0969da;
+    border: 2px solid #fff; box-shadow: 0 0 0 1px #0969da; }
   .screen-action-overlay { position: absolute; inset: 0; display: none; z-index: 5;
     align-items: center; justify-content: center; background: rgba(0,0,0,0.32); }
   .screen-action-overlay.shown { display: flex; }
@@ -1306,6 +1311,7 @@ export const INSPECTOR_HTML = `<!doctype html>
           <div class="screen-unavailable-sub">Couldn't capture the device — retrying…</div>
         </div>
         <div id="highlight" style="display:none"></div>
+        <div id="scroll-guide" style="display:none"><span class="scroll-guide-dot"></span></div>
         <div id="screen-action-overlay" class="screen-action-overlay" aria-hidden="true">
           <div class="screen-action-card">
             <span class="rec-sel-spinner"></span>
@@ -1448,6 +1454,10 @@ export const INSPECTOR_HTML = `<!doctype html>
         <div class="rec-grid cols-2">
           <button class="rec-act" data-screen="scroll-up"><span class="ico">↑</span><span>Scroll up</span></button>
           <button class="rec-act" data-screen="scroll-down"><span class="ico">↓</span><span>Scroll down</span></button>
+        </div>
+        <div class="rec-grid cols-2" style="margin-top:7px">
+          <button class="rec-act" data-screen="scroll-coords-up"><span class="ico">↑</span><span>Scroll up @ coords</span></button>
+          <button class="rec-act" data-screen="scroll-coords-down"><span class="ico">↓</span><span>Scroll down @ coords</span></button>
         </div>
         <div class="rec-y-range">
           <div class="rec-y-range-label">
@@ -2317,6 +2327,66 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
     hl.style.display = 'block';
   }
 
+  // Blue vertical guide line for "Scroll @ coordinates": a full-height line at
+  // the picked device-x, with a dot marking the start point. Same forward scale
+  // as drawHighlight so the line tracks the screenshot.
+  function drawScrollGuide(deviceX, startDeviceY) {
+    const img = $('screen-img');
+    const scale = Math.min(img.clientWidth / state.viewport.w, img.clientHeight / state.viewport.h);
+    const g = $('scroll-guide');
+    g.style.left = (deviceX * scale) + 'px';
+    g.querySelector('.scroll-guide-dot').style.top = (startDeviceY * scale) + 'px';
+    g.style.display = 'block';
+  }
+  function clearScrollGuide() {
+    $('scroll-guide').style.display = 'none';
+  }
+
+  // Coordinate-based scroll: pick a start point, draw a blue vertical guide at
+  // its x, then pick an end point on the same line — below the start for 'down',
+  // above it for 'up'. Snap the end to the start's x (a true vertical scroll),
+  // convert both to fractions of the screen, and replay the exact path.
+  //
+  // Finger direction follows mobile.scroll() semantics, NOT the pick order:
+  // 'down' reveals content below (finger swipes UP, bottom→top); 'up' reveals
+  // content above (finger swipes DOWN, top→bottom). So from/to are assigned by
+  // the line's top/bottom, matching the region Scroll up/down buttons.
+  function startCoordScroll(direction) {
+    const below = direction === 'down';
+    const endHint = below
+      ? 'Click a point below the start point to set the scroll end.'
+      : 'Click a point above the start point to set the scroll end.';
+    const missHint = below ? 'Pick a point below the start point' : 'Pick a point above the start point';
+    startPickMode('Click the start point of the scroll.', (p1) => {
+      drawScrollGuide(p1.x, p1.y);
+      const pickEnd = () => startPickMode(endHint, (p2) => {
+        const wrongSide = below ? p2.y <= p1.y : p2.y >= p1.y;
+        if (wrongSide) {
+          setStatus(missHint);
+          drawScrollGuide(p1.x, p1.y);
+          pickEnd();
+          return;
+        }
+        const vw = state.viewport.w;
+        const vh = state.viewport.h;
+        const xFrac = p1.x / vw;
+        const topFrac = Math.min(p1.y, p2.y) / vh;
+        const botFrac = Math.max(p1.y, p2.y) / vh;
+        // 'down' → finger up (bottom→top); 'up' → finger down (top→bottom).
+        const fromYFrac = below ? botFrac : topFrac;
+        const toYFrac = below ? topFrac : botFrac;
+        clearScrollGuide();
+        postScreenAction({
+          kind: 'coordScroll',
+          direction,
+          fromX: xFrac, fromY: fromYFrac,
+          toX: xFrac,   toY: toYFrac,
+        });
+      });
+      pickEnd();
+    });
+  }
+
   // ─── Attributes panel ────────────────────────────────────────────
   function renderAttrs(el) {
     const rows = [];
@@ -3011,6 +3081,7 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
     pickHandler = null;
     $('rec-pickhint').style.display = 'none';
     $('screen-host').classList.remove('pick-mode');
+    clearScrollGuide();
   }
   $('btn-rec-cancel').onclick = cancelPickMode;
 
@@ -3134,7 +3205,8 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
       fill: 'Typing…', clear: 'Clearing…', swipe: 'Swiping…', scrollIntoView: 'Scrolling…',
       pinch: 'Pinching…', check: 'Checking…', uncheck: 'Unchecking…', focus: 'Focusing…',
       blur: 'Blurring…', press: 'Pressing key…', pressSequentially: 'Typing…',
-      selectOption: 'Selecting…', dragTo: 'Dragging…', scroll: 'Scrolling…' };
+      selectOption: 'Selecting…', dragTo: 'Dragging…', scroll: 'Scrolling…',
+      coordScroll: 'Scrolling…' };
     return m[kind] || 'Performing action…';
   }
   function beginAction(label) {
@@ -3509,6 +3581,8 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
             }).then(refreshScript).then(() => setTimeout(fetchSnapshot, 300));
           });
           return;
+        case 'scroll-coords-up':   return startCoordScroll('up');
+        case 'scroll-coords-down': return startCoordScroll('down');
         case 'drag-and-drop': {
           // Both endpoints must resolve to uniquely-locatable elements;
           // re-arm the relevant pick step on a miss. Records as

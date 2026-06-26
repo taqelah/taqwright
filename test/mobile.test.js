@@ -262,3 +262,61 @@ describe('Mobile.swipe — Android native gesture', () => {
     assert.equal(r.height, 399); // floor(2000 * (0.6 - 0.4)); float → 399, not 400
   });
 });
+
+describe('Mobile.swipe — explicit from/to is an exact point-to-point line', () => {
+  // A vertical line where from.x === to.x used to collapse the native
+  // swipeGesture region to a 2px-wide sliver at the screen edge and never
+  // scroll. With both from and to provided the gesture must be the exact
+  // W3C pointer line instead.
+  test('Android: explicit line uses W3C pointer coords, not swipeGesture', async () => {
+    let script = null;
+    let actions = null;
+    const { mobile } = makeMobile(Platform.ANDROID, {
+      getWindowRect: async () => ({ x: 0, y: 0, width: 1000, height: 2000 }),
+      executeScript: async (cmd, args) => {
+        script = { cmd, args };
+      },
+      performActions: async (a) => {
+        actions = a;
+      },
+    });
+    await mobile.scroll('down', { from: { x: 0.98, y: 0.6 }, to: { x: 0.98, y: 0.5 } });
+    assert.equal(script, null); // native swipeGesture skipped entirely
+    const moves = actions[0].actions;
+    assert.deepEqual(moves[0], { type: 'pointerMove', duration: 0, x: 980, y: 1200 });
+    assert.deepEqual(moves[1], { type: 'pointerDown', button: 0 });
+    assert.deepEqual(moves[2], { type: 'pointerMove', duration: 300, x: 980, y: 1000 });
+    assert.deepEqual(moves[3], { type: 'pointerUp', button: 0 });
+  });
+
+  test('iOS: explicit line uses W3C pointer coords, not mobile: swipe', async () => {
+    let script = null;
+    let actions = null;
+    const { mobile } = makeMobile(Platform.IOS, {
+      getWindowRect: async () => ({ x: 0, y: 0, width: 1000, height: 2000 }),
+      executeScript: async (cmd, args) => {
+        script = { cmd, args };
+      },
+      performActions: async (a) => {
+        actions = a;
+      },
+    });
+    await mobile.scroll('down', { from: { x: 0.98, y: 0.6 }, to: { x: 0.98, y: 0.5 } });
+    assert.equal(script, null); // native mobile: swipe skipped entirely
+    const moves = actions[0].actions;
+    assert.deepEqual(moves[0], { type: 'pointerMove', duration: 0, x: 980, y: 1200 });
+    assert.deepEqual(moves[2], { type: 'pointerMove', duration: 300, x: 980, y: 1000 });
+  });
+
+  test('partial coords (from only) keep the native region gesture', async () => {
+    let call = null;
+    const { mobile } = makeMobile(Platform.ANDROID, {
+      getWindowRect: async () => ({ x: 0, y: 0, width: 1000, height: 2000 }),
+      executeScript: async (cmd, args) => {
+        call = { cmd, args };
+      },
+    });
+    await mobile.swipe('up', { from: { y: 0.6 } });
+    assert.equal(call.cmd, 'mobile: swipeGesture');
+  });
+});

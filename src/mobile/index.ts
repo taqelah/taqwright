@@ -34,12 +34,17 @@ export interface SwipeOptions {
    * Start point as fractions of screen (0..1). Each axis is optional and
    * defaults to the direction-aware center anchor. Use to avoid status bars,
    * notches, or to scroll within a specific region of the screen.
+   *
+   * Supplying both `from` and `to` makes the gesture a literal point-to-point
+   * swipe along the exact line you give. With only one of them (or neither),
+   * the native direction-based fling is used and the missing axis defaults to
+   * the direction-aware anchor.
    */
   from?: { x?: number; y?: number };
   /**
-   * End point as fractions of screen (0..1). When both axes are provided,
-   * the gesture targets this point exactly and `direction`/`distance` are
-   * ignored on those axes.
+   * End point as fractions of screen (0..1). When both `from` and `to` are
+   * provided the gesture targets this point exactly (a literal point-to-point
+   * swipe) and `direction`/`distance` are ignored.
    */
   to?: { x?: number; y?: number };
 }
@@ -402,13 +407,22 @@ export class Mobile {
     const toX = opts?.to?.x !== undefined ? Math.floor(rect.width * opts.to.x) : defaultToX;
     const toY = opts?.to?.y !== undefined ? Math.floor(rect.height * opts.to.y) : defaultToY;
 
+    // When the caller supplies BOTH `from` and `to` they're describing an
+    // exact start→end line, not a direction. The native gesture commands
+    // below take a region + direction + percent, which collapses a literal
+    // line into a bounding box (a vertical swipe where from.x === to.x
+    // degenerates to a 2px-wide sliver). So for an explicit line we skip the
+    // native path and fall straight through to the W3C pointer line below,
+    // which honours the exact pixel coordinates on every platform.
+    const hasExplicitLine = opts?.from !== undefined && opts?.to !== undefined;
+
     // Prefer Appium's native gesture commands when available — raw W3C
     // pointer events at 300ms get classified as a slow drag by UiAutomator2,
     // not a fling, so the page never scrolls. The native gesture API
     // produces a proper velocity-bearing fling that scrollable containers
     // recognize. Fall back to performActions if the driver doesn't expose
     // it (older versions, custom builds).
-    if (this.platform === Platform.ANDROID) {
+    if (!hasExplicitLine && this.platform === Platform.ANDROID) {
       // Translate any from/to overrides into a sub-region rectangle. The
       // defaults are deliberately conservative: a 40–60% Y band centered
       // on x=50% — enough to register as a fling in most lists, narrow
@@ -441,7 +455,7 @@ export class Mobile {
         // Unsupported — fall through to W3C pointer actions below.
       }
     }
-    if (this.platform === Platform.IOS) {
+    if (!hasExplicitLine && this.platform === Platform.IOS) {
       try {
         await this.driver.executeScript('mobile: swipe', [{ direction }]);
         return;
@@ -450,6 +464,10 @@ export class Mobile {
       }
     }
 
+    // Exact-line swipe (and the fallback for drivers without native gestures):
+    // a true finger swipe — press, move, release, no press-hold. For an
+    // explicit `from`/`to` line, `duration` is the caller's speed knob —
+    // shorter moves carry more momentum and read as a fling.
     try {
       await this.driver.performActions([
         {
