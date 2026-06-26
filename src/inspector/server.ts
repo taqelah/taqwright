@@ -1,6 +1,7 @@
 import type { AddressInfo } from 'node:net';
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from 'node:http';
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import type { Client as WebDriverClient } from 'webdriver';
@@ -32,6 +33,21 @@ import {
 } from './locator-suggester.js';
 import { INSPECTOR_HTML } from './ui.js';
 import { InspectorSession, type InspectorDefaults, type ConnectRequest } from './session.js';
+
+const _require = createRequire(import.meta.url);
+
+/** taqwright's published version, shown in the inspector header. */
+function getVersion(): string {
+  try {
+    return (_require('../../package.json') as { version: string }).version;
+  } catch {
+    return '0.0.0';
+  }
+}
+
+// Inject the version into the static page once at module load — the header
+// carries a `v__TAQWRIGHT_VERSION__` placeholder that the build can't fill in.
+const INSPECTOR_HTML_PAGE = INSPECTOR_HTML.replace(/__TAQWRIGHT_VERSION__/g, getVersion());
 
 export interface InspectorServerOptions {
   defaults: InspectorDefaults;
@@ -120,7 +136,7 @@ async function handle(
   // ─── Static ──────────────────────────────────────────────────────
   if (method === 'GET' && (url === '/' || url === '/index.html')) {
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-    res.end(INSPECTOR_HTML);
+    res.end(INSPECTOR_HTML_PAGE);
     return;
   }
   if (method === 'GET' && url === '/static/logo.png') {
