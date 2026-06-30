@@ -224,6 +224,8 @@ export const INSPECTOR_HTML = `<!doctype html>
     border-color: rgba(9,105,218,0.3); }
   .device-tile.booting { background: linear-gradient(180deg, #fff8c5 0%, var(--panel) 100%);
     border-color: rgba(154,103,0,0.35); }
+  .device-tile.unavailable { opacity: 0.5; cursor: not-allowed; }
+  .device-tile.unavailable:hover { border-color: var(--border); }
   .device-tile .pill.booting { color: var(--warn);
     border-color: rgba(154,103,0,0.35); background: #fff8c5; }
   .device-tile .pill.booting .led { display: none; }
@@ -1068,6 +1070,13 @@ export const INSPECTOR_HTML = `<!doctype html>
               <span class="conn-mode-sub">Real-device cloud</span>
             </span>
           </button>
+          <button class="conn-mode-btn" data-conn-mode="digitalai" type="button" role="tab">
+            <span class="conn-mode-ico">☁</span>
+            <span class="conn-mode-body">
+              <span class="conn-mode-title">Digital.ai</span>
+              <span class="conn-mode-sub">Digital.ai Testing cloud</span>
+            </span>
+          </button>
         </div>
       </div>
 
@@ -1122,7 +1131,11 @@ export const INSPECTOR_HTML = `<!doctype html>
             <span class="grow"></span>
             <span id="cloud-creds-pill" class="pill down"><span class="led"></span><span id="cloud-creds-pill-label">awaiting…</span></span>
           </div>
-          <div class="field">
+          <div class="field" id="cloud-server-field" style="display:none">
+            <label for="cloud-server">Cloud server URL</label>
+            <input id="cloud-server" placeholder="https://yourtenant.experitest.com" autocomplete="off" />
+          </div>
+          <div class="field" id="cloud-user-field">
             <label for="cloud-user">Username</label>
             <input id="cloud-user" placeholder="username" autocomplete="off" />
           </div>
@@ -4165,7 +4178,7 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
       b.onclick = () => setConnectionMode(b.dataset.connMode);
     });
     // Cloud creds inputs — refresh pill + summary on every keystroke.
-    for (const id of ['cloud-user', 'cloud-key']) {
+    for (const id of ['cloud-server', 'cloud-user', 'cloud-key']) {
       $(id).addEventListener('input', refreshCloudCredsPill);
       $(id).addEventListener('change', refreshCloudCredsPill);
     }
@@ -4208,7 +4221,20 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
   let cloudCredsValid = false;
 
   function isCloudMode() {
-    return connectionMode === 'browserstack' || connectionMode === 'lambdatest';
+    return connectionMode === 'browserstack' || connectionMode === 'lambdatest' || connectionMode === 'digitalai';
+  }
+
+  // Display label for a cloud provider key.
+  function cloudLabel(mode) {
+    if (mode === 'browserstack') return 'BrowserStack';
+    if (mode === 'lambdatest') return 'LambdaTest';
+    if (mode === 'digitalai') return 'Digital.ai Testing';
+    return mode;
+  }
+
+  // Digital.ai authenticates with an access key + tenant URL (no username).
+  function cloudNeedsUser() {
+    return connectionMode !== 'digitalai';
   }
 
   function setConnectionMode(mode) {
@@ -4230,10 +4256,16 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
     } else {
       if (local) local.style.display = 'none';
       if (cloud) cloud.style.display = '';
-      const provLabel = mode === 'browserstack' ? 'BrowserStack' : 'LambdaTest';
+      const provLabel = cloudLabel(mode);
       if (intro) intro.innerHTML = 'Connecting to <strong>' + provLabel + '</strong> cloud devices. Enter your credentials below — <strong>Next</strong> unlocks once they are filled in.';
       const titleEl = document.getElementById('cloud-creds-title');
       if (titleEl) titleEl.textContent = provLabel + ' credentials';
+      // Digital.ai: show the tenant cloud-server field, hide the (unused) username.
+      const isDai = mode === 'digitalai';
+      const serverField = document.getElementById('cloud-server-field');
+      const userField = document.getElementById('cloud-user-field');
+      if (serverField) serverField.style.display = isDai ? '' : 'none';
+      if (userField) userField.style.display = isDai ? 'none' : '';
       // Restore the new provider's creds: in-memory cache first, env vars
       // as fallback. Always overwrites — no leakage from the previous one.
       loadCloudCredsForMode(mode);
@@ -4261,7 +4293,9 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
       appInput.placeholder = cloud
         ? (connectionMode === 'browserstack'
             ? 'bs://… (uploaded via BrowserStack app-upload)'
-            : 'lt://… (uploaded via LambdaTest app-upload)')
+            : connectionMode === 'lambdatest'
+              ? 'lt://… (uploaded via LambdaTest app-upload)'
+              : 'cloud:<bundleId> (or a local .apk / .ipa to upload)')
         : 'optional · path to .apk / .ipa / .app';
     }
     // Browse button is meaningless for cloud — no native picker uploads to cloud yet.
@@ -4283,7 +4317,7 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
       const r = await fetch('/api/cloud/env');
       cloudEnvCache = await r.json();
     } catch {
-      cloudEnvCache = { browserstack: { user: '', key: '' }, lambdatest: { user: '', key: '' } };
+      cloudEnvCache = { browserstack: { user: '', key: '' }, lambdatest: { user: '', key: '' }, digitalai: { key: '', cloudServer: '' } };
     }
     return cloudEnvCache;
   }
@@ -4291,7 +4325,7 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
   // Per-provider in-memory cache of what the user has typed. Lets the
   // user toggle BrowserStack ↔ LambdaTest without losing the creds for
   // either one.
-  const cloudCredsByProvider = { browserstack: null, lambdatest: null };
+  const cloudCredsByProvider = { browserstack: null, lambdatest: null, digitalai: null };
 
   // Save the currently-displayed cloud creds into the cache for the
   // current cloud mode (no-op when local).
@@ -4299,10 +4333,12 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
     if (!isCloudMode()) return;
     const userEl = document.getElementById('cloud-user');
     const keyEl = document.getElementById('cloud-key');
+    const serverEl = document.getElementById('cloud-server');
     if (!userEl || !keyEl) return;
     cloudCredsByProvider[connectionMode] = {
       user: (userEl.value || '').trim(),
       key: (keyEl.value || '').trim(),
+      cloudServer: serverEl ? (serverEl.value || '').trim() : '',
     };
   }
 
@@ -4312,30 +4348,38 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
   async function loadCloudCredsForMode(mode) {
     const userEl = $('cloud-user');
     const keyEl = $('cloud-key');
+    const serverEl = $('cloud-server');
     let user = '';
     let key = '';
+    let cloudServer = '';
     let fromCache = false;
     const cached = cloudCredsByProvider[mode];
-    if (cached && (cached.user || cached.key)) {
-      user = cached.user;
-      key = cached.key;
+    if (cached && (cached.user || cached.key || cached.cloudServer)) {
+      user = cached.user || '';
+      key = cached.key || '';
+      cloudServer = cached.cloudServer || '';
       fromCache = true;
     } else {
       const env = await loadCloudEnvOnce();
-      const slot = env[mode] || { user: '', key: '' };
+      const slot = env[mode] || {};
       user = slot.user || '';
       key = slot.key || '';
+      cloudServer = slot.cloudServer || '';
     }
     if (userEl) userEl.value = user;
     if (keyEl) keyEl.value = key;
+    if (serverEl) serverEl.value = cloudServer;
     const hint = $('cloud-creds-hint');
     if (hint) {
       const envName = mode === 'browserstack'
         ? 'BROWSERSTACK_USERNAME / BROWSERSTACK_ACCESS_KEY'
-        : 'LAMBDATEST_USERNAME / LAMBDATEST_ACCESS_KEY';
+        : mode === 'lambdatest'
+          ? 'LAMBDATEST_USERNAME / LAMBDATEST_ACCESS_KEY'
+          : 'DIGITALAI_CLOUD_SERVER / DIGITALAI_ACCESS_KEY';
+      const anyVal = mode === 'digitalai' ? (key || cloudServer) : (user || key);
       hint.innerHTML = fromCache
         ? '✓ Restored from this session.'
-        : ((user || key)
+        : (anyVal
             ? '✓ Prefilled from <code>' + envName + '</code>. Override here for this session.'
             : 'No env vars detected (<code>' + envName + '</code>). Paste credentials above or set the env vars before launching the inspector.');
     }
@@ -4348,7 +4392,9 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
     if (!pill || !label) return;
     const u = ($('cloud-user').value || '').trim();
     const k = ($('cloud-key').value || '').trim();
-    if (u && k) {
+    const srv = ($('cloud-server').value || '').trim();
+    const valid = connectionMode === 'digitalai' ? !!(k && srv) : !!(u && k);
+    if (valid) {
       pill.className = 'pill live';
       label.textContent = 'creds detected';
       cloudCredsValid = true;
@@ -4430,6 +4476,13 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
     const status = $('app-inspect-status');
     const path = $('cap-app').value.trim();
     if (!path) { status.textContent = ''; status.className = 'app-inspect-status'; return; }
+    // Digital.ai references an already-on-cloud app by a cloud: bundle id — not a
+    // local file. Acknowledge it and remind the user to set the matching bundle id.
+    if (/^cloud:/i.test(path)) {
+      status.textContent = '✓ Digital.ai cloud app — set the matching Package / Bundle ID below.';
+      status.className = 'app-inspect-status ok';
+      return;
+    }
     // Cloud / remote URLs aren't on the local filesystem — the cloud
     // session resolves them on its own; we skip parsing aapt/plutil
     // and just acknowledge the URL so the user sees positive feedback.
@@ -4611,7 +4664,7 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
     const nextBtn = $('btn-step-next');
     if (wizardStep === 1) {
       if (isCloudMode()) {
-        const provLabel = connectionMode === 'browserstack' ? 'BrowserStack' : 'LambdaTest';
+        const provLabel = cloudLabel(connectionMode);
         if (cloudCredsValid) {
           summary.innerHTML = '<strong>' + provLabel + ' creds set</strong> — continue to pick a device.';
           nextBtn.disabled = false;
@@ -4653,7 +4706,7 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
     const auto = f.platform === 'iOS' ? 'XCUITest' : 'UiAutomator2';
     const dev = f.device ? ' · <strong>' + escapeHtml(f.device) + '</strong>' : '';
     if (isCloudMode()) {
-      const provLabel = connectionMode === 'browserstack' ? 'BrowserStack' : 'LambdaTest';
+      const provLabel = cloudLabel(connectionMode);
       summary.innerHTML =
         'Connect to <strong>' + provLabel + '</strong> · <strong>' + f.platform + '</strong> · ' + auto + dev;
     } else {
@@ -4749,7 +4802,9 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
       if (isCloudMode()) {
         const u = ($('cloud-user').value || '').trim();
         const k = ($('cloud-key').value || '').trim();
-        if (!u || !k) {
+        const srv = ($('cloud-server').value || '').trim();
+        const credsMissing = connectionMode === 'digitalai' ? (!k || !srv) : (!u || !k);
+        if (credsMissing) {
           lastDeviceData = { android: [], ios: [], toolsMissing: {} };
           $('devices-warn').innerHTML =
             '<div class="device-warn">Cloud creds missing — go back to step 1.</div>';
@@ -4759,7 +4814,7 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
         const r = await fetch('/api/cloud/devices', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ provider: connectionMode, user: u, key: k }),
+          body: JSON.stringify({ provider: connectionMode, user: u, key: k, cloudServer: srv }),
         });
         const j = await r.json();
         if (!r.ok || !j.ok) throw new Error(j.error || ('HTTP ' + r.status));
@@ -4769,13 +4824,21 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
         const ios = [];
         for (const d of j.devices) {
           const synthUdid = connectionMode + ':' + d.platform + ':' + d.deviceName + ':' + d.osVersion;
+          // Only connectable (available) devices are selectable tiles; others
+          // (In Use / Offline on Digital.ai) render greyed-out and unselectable.
+          const available = d.available !== false;
           const dev = {
             type: d.platform,
             udid: synthUdid,
             name: d.deviceName,
             osVersion: d.osVersion,
-            state: 'booted',
-            cloud: { provider: connectionMode, realDevice: !!d.realDevice },
+            state: available ? 'booted' : 'unavailable',
+            cloud: {
+              provider: connectionMode,
+              realDevice: !!d.realDevice,
+              available: available,
+              status: d.status || '',
+            },
           };
           (d.platform === 'ios' ? ios : android).push(dev);
         }
@@ -4919,14 +4982,18 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
     // Shutdown AVD whose system image is in no SDK — cannot boot (Start disabled).
     const unbootable = !isCloud && dev.bootable === false && !isBooted && !isBooting;
     const selected = isBooted && isSelected(dev);
+    // Cloud device that's online but not connectable (In Use / Offline on Digital.ai).
+    const cloudUnavail = isCloud && dev.cloud.available === false;
     const stateLabel = isCloud
-      ? (dev.cloud.realDevice ? 'cloud · real' : 'cloud · sim')
+      ? (cloudUnavail
+          ? (dev.cloud.status || 'unavailable')
+          : (dev.cloud.realDevice ? 'cloud · real' : 'cloud · sim'))
       : isBooting ? 'booting…'
       : isBooted ? 'live'
       : unbootable ? 'image missing'
       : 'shutdown';
     const stateClass = isCloud
-      ? 'pill live'
+      ? (cloudUnavail ? 'pill down' : 'pill live')
       : isBooting ? 'pill booting'
       : isBooted ? 'pill live'
       : 'pill down';
@@ -4957,6 +5024,7 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
     const tileClasses = ['device-tile'];
     if (isBooting) tileClasses.push('booting');
     else if (isBooted) tileClasses.push('booted', 'selectable');
+    if (cloudUnavail) tileClasses.push('unavailable');
     if (selected) tileClasses.push('selected');
     return (
       '<div class="' + tileClasses.join(' ') + '" ' +
@@ -5242,6 +5310,7 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
           provider: connectionMode,
           user: ($('cloud-user').value || '').trim(),
           key: ($('cloud-key').value || '').trim(),
+          cloudServer: ($('cloud-server').value || '').trim(),
           platform: form.platform === 'iOS' ? 'ios' : 'android',
           deviceName: form.device,
           osVersion: form.version,
@@ -5258,7 +5327,7 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
     $('btn-connect').disabled = true;
     $('btn-connect').textContent = 'Connecting…';
     const targetLabel = isCloudMode()
-      ? (connectionMode === 'browserstack' ? 'BrowserStack hub' : 'LambdaTest hub')
+      ? (cloudLabel(connectionMode) + ' hub')
       : (body.appium.host + ':' + body.appium.port);
     // Let the user abort a slow connect. Aborting the fetch stops the client
     // waiting; the /api/connect/cancel POST tells the server to tear down any

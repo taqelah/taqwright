@@ -9,12 +9,14 @@ import {
   LocalDeviceProvider,
   BrowserStackDeviceProvider,
   LambdaTestDeviceProvider,
+  DigitalAiDeviceProvider,
 } from '../dist/providers/index.js';
 
 describe('isCloudProvider', () => {
   test('true for the cloud grids', () => {
     assert.equal(isCloudProvider('browserstack'), true);
     assert.equal(isCloudProvider('lambdatest'), true);
+    assert.equal(isCloudProvider('digitalai'), true);
   });
   test('false for local providers / undefined', () => {
     assert.equal(isCloudProvider('emulator'), false);
@@ -28,6 +30,7 @@ describe('getProviderClass', () => {
   test('resolves each known provider to its class', () => {
     assert.equal(getProviderClass('browserstack'), BrowserStackDeviceProvider);
     assert.equal(getProviderClass('lambdatest'), LambdaTestDeviceProvider);
+    assert.equal(getProviderClass('digitalai'), DigitalAiDeviceProvider);
     assert.equal(getProviderClass('emulator'), EmulatorProvider);
     assert.equal(getProviderClass('local-device'), LocalDeviceProvider);
   });

@@ -49,18 +49,18 @@ test('User can login', async ({ mobile }) => {
 
 If you've used Playwright, you already know Taqwright.
 
-|                            | Taqwright                                                                            | Mobilewright                                                                                                         |
-| -------------------------- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- |
-| **Codegen tool**           | Yes (built-in `codegen`)                                                             | No                                                                                                                   |
-| **React Native & Flutter** | Yes                                                                                  | No                                                                                                                   |
-| **AI / agents**            | AI test generation — [Taqwright Lime CLI](https://www.taqwright.ai/), Appium MCP     | Depends on accessibility ids — no xpath/platform fallback, so legacy apps without accessibility metadata are limited |
-| **Locators**               | Roles / labels + id / xpath / UiAutomator / predicate / class-chain                  | Roles / labels                                                                                                       |
-| **Real devices (cloud)**   | BrowserStack, LambdaTest — and support for all your favourite cloud device platforms | Vendor-locked to mobile-use.com                                                                                      |
-| **Automation engine**      | Appium 3 / WebDriver                                                                 | mobilecli (custom)                                                                                                   |
-| **API style**              | Playwright (`getByRole`, `expect`)                                                   | Playwright (`getByRole`, `expect`)                                                                                   |
-| **Auto-wait**              | Built-in, every action                                                               | Built-in, every action                                                                                               |
-| **Cross-platform**         | iOS + Android, one API                                                               | iOS + Android, one API                                                                                               |
-| **Test runner**            | Playwright Test fixtures                                                             | Playwright Test fixtures                                                                                             |
+|                            | Taqwright                                                                                                | Mobilewright                                                                                                         |
+| -------------------------- | -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| **Codegen tool**           | Yes (built-in `codegen`)                                                                                 | No                                                                                                                   |
+| **React Native & Flutter** | Yes                                                                                                      | No                                                                                                                   |
+| **AI / agents**            | AI test generation — [Taqwright Lime CLI](https://www.taqwright.ai/), Appium MCP                         | Depends on accessibility ids — no xpath/platform fallback, so legacy apps without accessibility metadata are limited |
+| **Locators**               | Roles / labels + id / xpath / UiAutomator / predicate / class-chain                                      | Roles / labels                                                                                                       |
+| **Real devices (cloud)**   | BrowserStack, LambdaTest, Digital.ai Testing — and support for all your favourite cloud device platforms | Vendor-locked to mobile-use.com                                                                                      |
+| **Automation engine**      | Appium 3 / WebDriver                                                                                     | mobilecli (custom)                                                                                                   |
+| **API style**              | Playwright (`getByRole`, `expect`)                                                                       | Playwright (`getByRole`, `expect`)                                                                                   |
+| **Auto-wait**              | Built-in, every action                                                                                   | Built-in, every action                                                                                               |
+| **Cross-platform**         | iOS + Android, one API                                                                                   | iOS + Android, one API                                                                                               |
+| **Test runner**            | Playwright Test fixtures                                                                                 | Playwright Test fixtures                                                                                             |
 
 ## Features
 
@@ -71,7 +71,7 @@ If you've used Playwright, you already know Taqwright.
 - **Retry assertions** — `expect(locator).toBeVisible()` polls until satisfied or times out
 - **Rich locators** — `getByRole` / `getByText` / `getByLabel`, plus `xpath` / UiAutomator / NSPredicate / class-chain
 - **Built-in codegen** — `npx taqwright codegen` records a test as you tap through the app
-- **Cloud devices in ~10 seconds** — point a project at BrowserStack or LambdaTest with a few lines of config
+- **Cloud devices in ~10 seconds** — point a project at BrowserStack, LambdaTest, or Digital.ai Testing with a few lines of config
 - **Auto-discover devices** — `device.autoDiscover` finds and assigns emulators/simulators to each worker
 - **Parallel testing, handled** — taqwright spawns and manages a dedicated Appium session per worker automatically
 - **Traces, video & reports** — per-action traces, full-run videos, and Playwright reporters
