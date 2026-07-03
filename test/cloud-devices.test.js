@@ -3,9 +3,11 @@
 
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseLambdatestDevices } from '../dist/inspector/server.js';
 import { omitLocalEmulatorCaps } from '../dist/capabilities.js';
-import { buildCapabilities as buildLambdatestCaps } from '../dist/providers/lambdatest/index.js';
+import {
+  buildCapabilities as buildLambdatestCaps,
+  parseLambdatestDevices,
+} from '../dist/providers/lambdatest/index.js';
 
 describe('parseLambdatestDevices', () => {
   test('parses the { devices: [...] } shape', () => {

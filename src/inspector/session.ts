@@ -11,7 +11,7 @@ import { isPortOpen } from '../auto-appium.js';
 import { omitLocalEmulatorCaps } from '../capabilities.js';
 import { ensurePlainGlobalDispatcher } from '../undici-dispatcher.js';
 import { startAppiumServer, killAppiumOnPort } from '../providers/appium.js';
-import { createDeviceProvider } from '../providers/index.js';
+import { createDeviceProvider, getSpec, type CloudProviderName } from '../providers/index.js';
 import { Recorder, type RecordedAction } from './recorder.js';
 
 /**
@@ -82,7 +82,7 @@ export interface InspectorDefaults {
  * classes the test runner uses can be reused verbatim by the inspector.
  */
 export interface CloudConnectRequest {
-  provider: 'browserstack' | 'lambdatest';
+  provider: CloudProviderName;
   user: string;
   key: string;
   platform: 'android' | 'ios';
@@ -360,16 +360,13 @@ export class InspectorSession {
     if (!cloud.user || !cloud.key) {
       throw new Error(`${cloud.provider} username + access key are required.`);
     }
-    // Provider classes read credentials from process.env. Set them for
-    // the duration of this connect; they get cleared on disconnect so
-    // the next mode swap doesn't leak.
-    if (cloud.provider === 'browserstack') {
-      process.env.BROWSERSTACK_USERNAME = cloud.user;
-      process.env.BROWSERSTACK_ACCESS_KEY = cloud.key;
-    } else {
-      process.env.LAMBDATEST_USERNAME = cloud.user;
-      process.env.LAMBDATEST_ACCESS_KEY = cloud.key;
-    }
+    // Provider classes read credentials from process.env under each grid's
+    // own var names — which the spec already declares in `credentialEnv`, so
+    // set them from there rather than branching per provider.
+    const spec = getSpec(cloud.provider);
+    const [userVar, keyVar] = spec.credentialEnv;
+    process.env[userVar] = cloud.user;
+    process.env[keyVar] = cloud.key;
     const platform = cloud.platform === 'ios' ? Platform.IOS : Platform.ANDROID;
     // Codegen is interactive: unlike `taqwright test`, don't auto-accept
     // permission / system alerts (location, gallery, …) so the user can see and
@@ -380,10 +377,7 @@ export class InspectorSession {
     // form from the local config, so a cloud selection can carry them in; they'd
     // be wrong on a cloud provider (which picks the device by name + version).
     const userCloudCaps = omitLocalEmulatorCaps(cloud.capabilities ?? {});
-    const permKeys =
-      cloud.provider === 'browserstack'
-        ? ['appium:autoGrantPermissions', 'appium:autoAcceptAlerts']
-        : ['autoGrantPermissions', 'autoAcceptAlerts'];
+    const permKeys = spec.permissionCapKeys;
     const codegenPermOff: Record<string, unknown> = {};
     for (const k of permKeys) {
       if (!(k in userCloudCaps)) codegenPermOff[k] = false;

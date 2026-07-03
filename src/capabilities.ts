@@ -1,5 +1,6 @@
 import type { Capabilities } from '@wdio/types';
 import { Platform, type TaqwrightUseOptions } from './types/index.js';
+import { isCloudProvider } from './providers/index.js';
 
 export function buildCapabilities(
   use: TaqwrightUseOptions,
@@ -66,12 +67,11 @@ export function buildCapabilities(
   // with "Activity does not exist" and never reaches the reinstall. Deferring
   // launch to the reset block makes a missing app self-heal — it's reinstalled
   // every test. A user-set `appium:autoLaunch` still wins (merged last below).
-  const isCloudProvider_ = provider === 'browserstack' || provider === 'lambdatest';
   if (
     use.resetBetweenTests &&
     use.buildPath &&
     use.appBundleId &&
-    !isCloudProvider_ &&
+    !isCloudProvider(provider) &&
     !('appium:autoLaunch' in userCaps)
   ) {
     caps['appium:autoLaunch'] = false;
