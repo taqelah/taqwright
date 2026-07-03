@@ -4,6 +4,7 @@ import {
   type TaqwrightUseOptions,
   type DeviceHandle,
   type DeviceProvider,
+  type CloudDevice,
 } from '../types/index.js';
 import { logger } from '../logger.js';
 import { ensurePlainGlobalDispatcher } from '../undici-dispatcher.js';
@@ -19,8 +20,14 @@ import { ensurePlainGlobalDispatcher } from '../undici-dispatcher.js';
  * lives in exactly one place.
  */
 export interface CloudSpec {
-  /** The `device.provider` value this spec serves. */
-  readonly provider: 'browserstack' | 'lambdatest';
+  /**
+   * The `device.provider` value this spec serves. Typed `string` (not a literal
+   * union) so registering a new grid needs no edit here — the runtime
+   * `CloudProvider` constructor validates it against `use.device.provider`, and
+   * `CloudProviderName` (in `src/providers/index.ts`) is derived from the
+   * registered specs.
+   */
+  readonly provider: string;
   /** `[usernameEnvVar, accessKeyEnvVar]` read from the ambient environment. */
   readonly credentialEnv: readonly [string, string];
   /** A `buildPath` already on the grid (this scheme) skips the upload step. */
@@ -57,6 +64,41 @@ export interface CloudSpec {
   resolveBundleId?(sessionId: string, authHeader: string): Promise<string | undefined>;
   /** Require an `appBundleId` at construction (grids that can't read it back). */
   readonly requireBundleId?: boolean;
+  /**
+   * The permission-related caps the inspector turns OFF during codegen so the
+   * user can see and record permission/alert prompts. Expressed in THIS grid's
+   * dialect (BrowserStack uses `appium:`-prefixed keys; LambdaTest uses bare
+   * ones). Consumed by the inspector's `connectCloud`.
+   */
+  readonly permissionCapKeys: readonly string[];
+  /**
+   * The device-catalog for this grid — the URL to list devices and a PURE
+   * parser from the raw response to `CloudDevice[]`. The HTTP fetch + auth +
+   * error handling live in the inspector server; a spec only declares the URL
+   * (any `region` etc. baked into it) and how to read the response.
+   */
+  readonly catalog: {
+    listUrl(): string;
+    parseDevices(raw: unknown): CloudDevice[];
+  };
+  /**
+   * Display metadata for the inspector's connection-mode picker — the button
+   * label, its subtitle, and an icon. Lets the UI render one button per grid
+   * from the registry instead of hardcoding each.
+   */
+  readonly display: {
+    readonly label: string;
+    readonly subtitle: string;
+    /** Emoji fallback shown when `logoUrl` is absent. */
+    readonly icon: string;
+    /**
+     * URL of the brand logo image the inspector serves for its picker (e.g.
+     * `/static/cloud-vendors/browserstack.jpeg`). When set it replaces the
+     * emoji. Files live in `src/images/cloud_vendors/` and are copied to
+     * `dist/images/cloud_vendors/` by scripts/copy-assets.mjs.
+     */
+    readonly logoUrl?: string;
+  };
 }
 
 /** HTTP Basic credentials header from a username/key pair. */

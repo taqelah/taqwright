@@ -10,6 +10,7 @@ import {
   W3C_ELEMENT_KEY,
   type LocatorDescriptor,
   type LocatorStrategy,
+  type CloudDevice,
 } from '../types/index.js';
 import { Locator, buildLocatorFromDescriptor, type LocatorContext } from '../locator/index.js';
 import type { SwipeDirection, RecordedLocator } from './recorder.js';
@@ -33,6 +34,8 @@ import {
 } from './locator-suggester.js';
 import { INSPECTOR_HTML } from './ui.js';
 import { InspectorSession, type InspectorDefaults, type ConnectRequest } from './session.js';
+import { getSpec, CLOUD_SPECS, type CloudProviderName } from '../providers/index.js';
+import { basicAuth } from '../providers/cloud.js';
 
 const _require = createRequire(import.meta.url);
 
@@ -150,6 +153,23 @@ async function handle(
     } catch {
       res.writeHead(404, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ error: 'logo asset not found' }));
+    }
+    return;
+  }
+  // Cloud-vendor brand logos (referenced by CloudSpec.display.logoUrl). Files
+  // live in dist/images/cloud_vendors/; only a plain basename is served.
+  if (method === 'GET' && url.startsWith('/static/cloud-vendors/')) {
+    const file = url.slice('/static/cloud-vendors/'.length);
+    const served = getCloudVendorAsset(file);
+    if (served) {
+      res.writeHead(200, {
+        'content-type': served.contentType,
+        'cache-control': 'public, max-age=86400',
+      });
+      res.end(served.buf);
+    } else {
+      res.writeHead(404, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: 'cloud vendor asset not found' }));
     }
     return;
   }
@@ -381,23 +401,48 @@ async function handle(
     return;
   }
 
+  // ─── Cloud providers: registry-driven UI metadata ────────────
+  // Lets the inspector render one connection-mode button per registered grid
+  // and drive every provider-specific label/placeholder/hint from data instead
+  // of hardcoding each. Exposes only var NAMES + scheme + display strings — no
+  // credential values.
+  if (method === 'GET' && url === '/api/cloud/providers') {
+    json(
+      res,
+      200,
+      CLOUD_SPECS.map((s) => ({
+        provider: s.provider,
+        label: s.display.label,
+        subtitle: s.display.subtitle,
+        icon: s.display.icon,
+        logoUrl: s.display.logoUrl,
+        prebuiltScheme: s.prebuiltScheme,
+        envVars: s.credentialEnv,
+        // Package/bundle id is mandatory for grids that can't read it back from
+        // the session (LambdaTest); grids with a resolveBundleId (BrowserStack)
+        // fill it in post-connect, so the form can leave it optional + promise it.
+        requireBundleId: !!s.requireBundleId,
+        resolvesBundleId: !!s.resolveBundleId,
+      })),
+    );
+    return;
+  }
+
   // ─── Cloud devices: env probe + catalog fetch ────────────────
   if (method === 'GET' && url === '/api/cloud/env') {
-    json(res, 200, {
-      browserstack: {
-        user: process.env.BROWSERSTACK_USERNAME ?? '',
-        key: process.env.BROWSERSTACK_ACCESS_KEY ?? '',
-      },
-      lambdatest: {
-        user: process.env.LAMBDATEST_USERNAME ?? '',
-        key: process.env.LAMBDATEST_ACCESS_KEY ?? '',
-      },
-    });
+    // Registry-driven: each grid's credential env-var names come from its spec,
+    // so a newly registered grid is prefilled without editing this handler.
+    const env: Record<string, { user: string; key: string }> = {};
+    for (const s of CLOUD_SPECS) {
+      const [userVar, keyVar] = s.credentialEnv;
+      env[s.provider] = { user: process.env[userVar] ?? '', key: process.env[keyVar] ?? '' };
+    }
+    json(res, 200, env);
     return;
   }
   if (method === 'POST' && url === '/api/cloud/devices') {
     const body = await readJson<{
-      provider: 'browserstack' | 'lambdatest';
+      provider: CloudProviderName;
       user: string;
       key: string;
     }>(req);
@@ -1252,6 +1297,38 @@ function getLogo(): Buffer {
   return logoBuf;
 }
 
+// Cloud-vendor logos live in dist/images/cloud_vendors/. Read + cache on demand,
+// keyed by basename so a request can't traverse outside the directory.
+const CLOUD_VENDORS_DIR = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  '../images/cloud_vendors',
+);
+const IMAGE_CONTENT_TYPES: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.svg': 'image/svg+xml',
+  '.webp': 'image/webp',
+};
+const cloudVendorCache = new Map<string, { buf: Buffer; contentType: string }>();
+function getCloudVendorAsset(file: string): { buf: Buffer; contentType: string } | undefined {
+  // Only ever serve a plain filename from the vendor dir — no path segments.
+  if (!/^[\w-]+\.[\w]+$/.test(file)) return undefined;
+  const cached = cloudVendorCache.get(file);
+  if (cached) return cached;
+  const ext = file.slice(file.lastIndexOf('.')).toLowerCase();
+  const contentType = IMAGE_CONTENT_TYPES[ext];
+  if (!contentType) return undefined;
+  try {
+    const buf = readFileSync(resolve(CLOUD_VENDORS_DIR, file));
+    const served = { buf, contentType };
+    cloudVendorCache.set(file, served);
+    return served;
+  } catch {
+    return undefined;
+  }
+}
+
 function closeServer(server: Server, done: () => void): void {
   server.close(() => done());
   if (typeof server.closeAllConnections === 'function') {
@@ -1484,87 +1561,32 @@ async function exportScriptToProject(
 }
 
 // ─── Cloud device-catalog fetching ─────────────────────────────
-export interface CloudDevice {
-  provider: 'browserstack' | 'lambdatest';
-  platform: 'android' | 'ios';
-  deviceName: string;
-  osVersion: string;
-  realDevice: boolean;
-}
+// `CloudDevice` now lives in `../types/index.js` (a leaf module the cloud specs
+// can also reach); re-export it here so existing importers of this path keep
+// working.
+export type { CloudDevice };
 
-/**
- * Parse LambdaTest's `/mobile-automation/api/v1/list` response into CloudDevices.
- * Shape-tolerant: the array may be top-level, under `devices`, or under `data`
- * (LambdaTest wraps several endpoints under `data`), and per-device field names
- * vary — so we fall back across the common spellings. Pure; exported for testing.
- */
-export function parseLambdatestDevices(raw: unknown): CloudDevice[] {
-  const r = (raw ?? {}) as Record<string, unknown>;
-  const arr: unknown[] = Array.isArray(raw)
-    ? raw
-    : Array.isArray(r.devices)
-      ? (r.devices as unknown[])
-      : Array.isArray(r.data)
-        ? (r.data as unknown[])
-        : [];
-  const devices: CloudDevice[] = [];
-  for (const item of arr) {
-    const d = item as Record<string, unknown>;
-    const name = d.deviceName ?? d.device ?? d.name;
-    if (!name) continue;
-    const os = String(d.platformName ?? d.platform ?? d.os ?? d.osName ?? '');
-    const version = d.osVersion ?? d.version ?? d.os_version ?? d.platformVersion;
-    devices.push({
-      provider: 'lambdatest',
-      platform: os.toLowerCase().includes('ios') ? 'ios' : 'android',
-      deviceName: String(name),
-      osVersion: version != null ? String(version) : '',
-      realDevice: true,
-    });
-  }
-  return devices;
-}
-
+// The device catalog is now spec-driven: each grid's `CloudSpec.catalog`
+// declares the list URL and a PURE parser (see src/providers/{browserstack,
+// lambdatest}/index.ts). Here we own only the grid-agnostic HTTP: auth, status
+// check, and the "200 but nothing parsed" diagnostic.
 async function fetchCloudDevices(
-  provider: 'browserstack' | 'lambdatest',
+  provider: CloudProviderName,
   user: string,
   key: string,
 ): Promise<CloudDevice[]> {
   if (!user || !key) {
     throw new Error(`${provider} username + access key are required.`);
   }
-  const auth = 'Basic ' + Buffer.from(`${user}:${key}`).toString('base64');
-  if (provider === 'browserstack') {
-    const r = await fetch('https://api-cloud.browserstack.com/app-automate/devices.json', {
-      headers: { Authorization: auth },
-    });
-    if (!r.ok) {
-      throw new Error(`BrowserStack devices.json returned ${r.status} — check credentials.`);
-    }
-    const raw = (await r.json()) as Array<{
-      device: string;
-      os: string;
-      os_version: string;
-      realMobile?: string | boolean;
-    }>;
-    return raw.map((d) => ({
-      provider,
-      platform: d.os.toLowerCase().includes('ios') ? 'ios' : 'android',
-      deviceName: d.device,
-      osVersion: d.os_version,
-      realDevice: d.realMobile === true || d.realMobile === 'true',
-    }));
-  }
-  // lambdatest
-  const r = await fetch(
-    'https://mobile-api.lambdatest.com/mobile-automation/api/v1/list?region=us',
-    { headers: { Authorization: auth } },
-  );
+  const spec = getSpec(provider);
+  const r = await fetch(spec.catalog.listUrl(), {
+    headers: { Authorization: basicAuth(user, key) },
+  });
   if (!r.ok) {
-    throw new Error(`LambdaTest devices API returned ${r.status} — check credentials.`);
+    throw new Error(`${spec.display.label} device list returned ${r.status} — check credentials.`);
   }
   const raw = await r.json();
-  const devices = parseLambdatestDevices(raw);
+  const devices = spec.catalog.parseDevices(raw);
   if (devices.length === 0) {
     // A 200 with an unrecognized shape used to yield a silent empty list. Surface
     // it instead: log the raw body and return an actionable error to the picker.
@@ -1573,12 +1595,11 @@ async function fetchCloudDevices(
         ? Object.keys(raw).join(', ')
         : typeof raw;
     console.error(
-      '[taqwright] LambdaTest device list — unrecognized response:',
+      `[taqwright] ${spec.display.label} device list — unrecognized response:`,
       JSON.stringify(raw).slice(0, 800),
     );
     throw new Error(
-      `LambdaTest returned 200 but no devices could be parsed (top-level: ${keys}). ` +
-        'If your account region is not "us", the us list can be empty. ' +
+      `${spec.display.label} returned 200 but no devices could be parsed (top-level: ${keys}). ` +
         'Check the inspector server logs for the raw response.',
     );
   }

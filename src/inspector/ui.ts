@@ -118,10 +118,16 @@ export const INSPECTOR_HTML = `<!doctype html>
   .conn-mode-label { font-size: 12px; font-weight: 600; color: var(--text-dim);
     text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px;
     padding-left: 2px; }
-  .conn-mode-toggle { display: grid; grid-template-columns: repeat(3, 1fr);
-    gap: 10px; }
-  @media (max-width: 800px) { .conn-mode-toggle { grid-template-columns: 1fr; } }
-  .conn-mode-btn { display: flex; align-items: center; gap: 12px;
+  .conn-mode-toggle { display: flex; flex-wrap: wrap; gap: 10px; }
+  /* Local button + each cloud cell + the add tile share one flexible track. */
+  .conn-mode-toggle > .conn-mode-btn,
+  .conn-mode-cell,
+  .conn-mode-add { flex: 1 1 220px; min-width: 0; }
+  @media (max-width: 800px) {
+    .conn-mode-toggle > .conn-mode-btn,
+    .conn-mode-cell,
+    .conn-mode-add { flex-basis: 100%; } }
+  .conn-mode-btn { display: flex; align-items: center; gap: 12px; width: 100%;
     padding: 12px 14px; background: var(--panel); border: 1px solid var(--border);
     border-radius: 8px; cursor: pointer; text-align: left;
     transition: border-color 0.1s, background 0.1s, box-shadow 0.1s;
@@ -138,10 +144,46 @@ export const INSPECTOR_HTML = `<!doctype html>
     border: 1px solid var(--border); }
   .conn-mode-btn.active .conn-mode-ico { background: var(--accent); color: white;
     border-color: var(--accent); }
+  /* Brand-logo icon: the image is its own art, so drop the box chrome (in the
+     active state too — the accent fill must not paint over the logo). */
+  .conn-mode-ico.has-logo, .conn-mode-btn.active .conn-mode-ico.has-logo {
+    background: #fff; border: 1px solid var(--border); padding: 0; overflow: hidden; }
+  .conn-mode-ico.has-logo img { width: 100%; height: 100%; display: block;
+    object-fit: contain; }
   .conn-mode-body { display: flex; flex-direction: column; gap: 2px;
     min-width: 0; }
   .conn-mode-title { font-weight: 600; font-size: 13.5px; color: var(--text); }
   .conn-mode-sub { font-size: 11.5px; color: var(--text-dim); }
+  /* A cloud cell wraps its mode button + a remove (×) overlay. */
+  .conn-mode-cell { position: relative; display: flex; }
+  .conn-mode-remove { position: absolute; top: 6px; right: 6px; z-index: 1;
+    width: 20px; height: 20px; border-radius: 5px; padding: 0; line-height: 1;
+    font-size: 14px; cursor: pointer; display: inline-flex; align-items: center;
+    justify-content: center; background: var(--panel-2); color: var(--text-muted);
+    border: 1px solid var(--border); opacity: 0; transition: opacity 0.1s; }
+  .conn-mode-cell:hover .conn-mode-remove, .conn-mode-remove:focus { opacity: 1; }
+  .conn-mode-remove:hover { color: var(--danger);
+    border-color: rgba(207,34,46,0.4); background: #ffebe9; }
+  /* "+ Add cloud device" tile — dashed, matches button height. */
+  .conn-mode-add { position: relative; display: flex; align-items: center;
+    justify-content: center; gap: 8px; padding: 12px 14px; background: transparent;
+    border: 1px dashed var(--border-strong); border-radius: 8px; cursor: pointer;
+    font: inherit; color: var(--text-dim); }
+  .conn-mode-add:hover { background: var(--panel-2); color: var(--text);
+    border-color: var(--accent); }
+  .conn-mode-add-plus { font-size: 18px; line-height: 1; }
+  /* Add-menu: hidden until the tile carries .open. */
+  .conn-mode-add-menu { display: none; position: absolute; top: calc(100% + 6px);
+    left: 0; right: 0; z-index: 20; background: var(--panel);
+    border: 1px solid var(--border); border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.12); overflow: hidden; }
+  .conn-mode-add.open .conn-mode-add-menu { display: block; }
+  .conn-mode-add-item { display: flex; align-items: center; gap: 12px;
+    padding: 10px 12px; cursor: pointer; text-align: left; width: 100%;
+    background: transparent; border: 0; border-bottom: 1px solid var(--border);
+    font: inherit; color: var(--text); }
+  .conn-mode-add-item:last-child { border-bottom: 0; }
+  .conn-mode-add-item:hover { background: var(--panel-2); }
   /* Step 1: prereqs grid */
   .prereq-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
     align-content: start; }
@@ -626,6 +668,14 @@ export const INSPECTOR_HTML = `<!doctype html>
     font-size: 11px; font-weight: 700; text-transform: uppercase;
     letter-spacing: 0.08em; color: var(--text-dim); margin-bottom: 9px; }
   .rec-group-title .grow { flex: 1; }
+  .rec-script-toolbar { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; }
+  .rec-script-toolbar .grow { flex: 1; }
+  #tab-script .rec-group-title { margin-bottom: 6px; }
+  #tab-script .rec-group-title, #tab-script .rec-script-toolbar { flex-shrink: 0; }
+  /* Clear = subtle destructive: quiet until hover, then red (mirrors .x-btn). */
+  button.icon.rec-clear { background: transparent; color: var(--text-dim); }
+  button.icon.rec-clear:hover { background: #ffebe9; color: var(--danger);
+    border-color: rgba(207,34,46,0.4); }
   .rec-subtitle { font-size: 11px; color: var(--text-muted); margin: 14px 0 8px;
     font-weight: 500; letter-spacing: 0.02em; }
   .rec-subtitle:first-child { margin-top: 0; }
@@ -720,8 +770,16 @@ export const INSPECTOR_HTML = `<!doctype html>
     border-radius: 8px; padding: 0; overflow: hidden; }
   .rec-script-card pre { background: transparent; padding: 12px 14px;
     font-family: var(--mono); font-size: 12.5px; line-height: 1.6;
-    white-space: pre-wrap; word-break: normal; overflow-wrap: anywhere; color: var(--text);
-    margin: 0; max-height: 320px; overflow: auto; }
+    white-space: pre; color: var(--text);
+    margin: 0; flex: 1; min-height: 0; overflow: auto; }
+  /* Recorded-script tab fills the pane: the code box grows to use all available
+     height instead of a short box with empty space below. :not(.hidden) keeps
+     the id selector from out-specifying the .tab-content.hidden display:none rule. */
+  #tab-script:not(.hidden) { display: flex; flex-direction: column; overflow: hidden; }
+  #tab-script .rec-group { flex: 1; min-height: 0; display: flex;
+    flex-direction: column; margin-bottom: 0; }
+  #tab-script .rec-script-card { flex: 1; min-height: 0; display: flex;
+    flex-direction: column; }
   .rec-script-card pre:empty::before { content: "// no actions yet — start recording and interact with the device";
     color: var(--text-muted); font-style: italic; }
   /* Syntax-highlight tokens (GitHub light theme palette). */
@@ -1047,25 +1105,14 @@ export const INSPECTOR_HTML = `<!doctype html>
       <div class="conn-mode-card">
         <div class="conn-mode-label">Where will the device run?</div>
         <div class="conn-mode-toggle" role="tablist">
+          <!-- The Local button is static. Cloud grids the user has added (from the
+               "Add cloud device" tile) are rendered here by renderConnModeButtons()
+               from /api/cloud/providers and remembered in localStorage. -->
           <button class="conn-mode-btn active" data-conn-mode="local" type="button" role="tab">
             <span class="conn-mode-ico">🖥</span>
             <span class="conn-mode-body">
               <span class="conn-mode-title">Local</span>
               <span class="conn-mode-sub">Emulators &amp; simulators on this machine</span>
-            </span>
-          </button>
-          <button class="conn-mode-btn" data-conn-mode="browserstack" type="button" role="tab">
-            <span class="conn-mode-ico">☁</span>
-            <span class="conn-mode-body">
-              <span class="conn-mode-title">BrowserStack</span>
-              <span class="conn-mode-sub">App Automate cloud devices</span>
-            </span>
-          </button>
-          <button class="conn-mode-btn" data-conn-mode="lambdatest" type="button" role="tab">
-            <span class="conn-mode-ico">☁</span>
-            <span class="conn-mode-body">
-              <span class="conn-mode-title">LambdaTest</span>
-              <span class="conn-mode-sub">Real-device cloud</span>
             </span>
           </button>
         </div>
@@ -1531,14 +1578,17 @@ export const INSPECTOR_HTML = `<!doctype html>
         <div class="rec-group-title">
           Recorded script
           <span class="grow"></span>
+          <button class="icon rec-clear" id="btn-clear-script" type="button">🗑 Clear</button>
+        </div>
+        <div class="rec-script-toolbar">
           <span class="lang-seg" id="script-lang">
             <button class="icon active" data-lang="ts" type="button">Taqwright</button>
             <button class="icon" data-lang="python" type="button">Python</button>
             <button class="icon" data-lang="java" type="button">Java</button>
           </span>
+          <span class="grow"></span>
           <button class="icon" id="btn-copy-script" type="button">⎘ Copy</button>
           <button class="icon" id="btn-export-script" type="button" title="Save the recorded script into your project's tests folder">↓ Export</button>
-          <button class="icon" id="btn-clear-script" type="button">Clear</button>
         </div>
         <div class="rec-lang-note" id="script-lang-note" style="display:none">Steps only — paste into your own Appium test (driver/setup not included).</div>
         <div class="rec-script-card">
@@ -4160,10 +4210,13 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
     $('btn-step-back').onclick = () => goToStep(wizardStep - 1);
     $('btn-step-next').onclick = () => goToStep(wizardStep + 1);
 
-    // Connection-mode picker (Local / BrowserStack / LambdaTest).
+    // Connection-mode picker. The Local button is static; the cloud buttons are
+    // rendered from /api/cloud/providers so a newly-registered grid appears
+    // automatically with no UI edit.
     document.querySelectorAll('.conn-mode-btn').forEach((b) => {
       b.onclick = () => setConnectionMode(b.dataset.connMode);
     });
+    loadCloudProvidersOnce().then(renderConnModeButtons);
     // Cloud creds inputs — refresh pill + summary on every keystroke.
     for (const id of ['cloud-user', 'cloud-key']) {
       $(id).addEventListener('input', refreshCloudCredsPill);
@@ -4207,8 +4260,159 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
   let connectionMode = 'local';
   let cloudCredsValid = false;
 
+  // Cloud-grid metadata, fetched once from /api/cloud/providers (registry-driven).
+  // Drives the mode buttons and every provider-specific label / placeholder / hint
+  // so onboarding a grid needs no UI edit.
+  let cloudProvidersList = [];
+  const cloudProvidersMeta = {};
+  async function loadCloudProvidersOnce() {
+    if (cloudProvidersList.length) return cloudProvidersList;
+    try {
+      const r = await fetch('/api/cloud/providers');
+      cloudProvidersList = await r.json();
+    } catch {
+      cloudProvidersList = [];
+    }
+    for (const p of cloudProvidersList) cloudProvidersMeta[p.provider] = p;
+    return cloudProvidersList;
+  }
+  // Human label for a cloud mode (falls back to the raw provider key).
+  function cloudLabel(mode) {
+    const m = cloudProvidersMeta[mode];
+    return (m && m.label) || mode;
+  }
+  // Cloud grids the user has added to the picker, remembered per-browser. The
+  // picker defaults to Local-only; a grid shows only after the user adds it.
+  function getAddedProviders() {
+    try {
+      return JSON.parse(localStorage.getItem('tw_cloud_providers_added') || '[]');
+    } catch {
+      return [];
+    }
+  }
+  function saveAddedProviders(arr) {
+    try {
+      localStorage.setItem('tw_cloud_providers_added', JSON.stringify(arr));
+    } catch {
+      // storage unavailable — added grids just won't persist this session
+    }
+  }
+  // Inner markup for a mode button (icon + label + subtitle). A provider that
+  // ships a brand logo (p.logoUrl, served by the inspector) renders it as an
+  // <img>; otherwise the emoji fallback is shown.
+  function connModeInner(p) {
+    const ico = p.logoUrl
+      ? '<span class="conn-mode-ico has-logo"><img src="' + escapeHtml(p.logoUrl) +
+        '" alt="' + escapeHtml(p.label) + '" /></span>'
+      : '<span class="conn-mode-ico">' + escapeHtml(p.icon) + '</span>';
+    return (
+      ico +
+      '<span class="conn-mode-body"><span class="conn-mode-title">' + escapeHtml(p.label) +
+      '</span><span class="conn-mode-sub">' + escapeHtml(p.subtitle) + '</span></span>'
+    );
+  }
+
+  // Rebuild the picker: static Local button + one cell per added cloud grid
+  // (each with a remove ×) + an "Add cloud device" tile when grids remain.
+  function renderConnModeButtons() {
+    const toggle = document.querySelector('.conn-mode-toggle');
+    if (!toggle) return;
+    // Clear everything except the static Local button.
+    toggle.querySelectorAll('.conn-mode-cell, .conn-mode-add').forEach((n) => n.remove());
+
+    const available = cloudProvidersList;
+    const availableKeys = available.map((p) => p.provider);
+    // Only render grids the server still advertises (a stored grid may be gone).
+    const added = getAddedProviders().filter((k) => availableKeys.includes(k));
+
+    for (const key of added) {
+      const p = cloudProvidersMeta[key];
+      const cell = document.createElement('div');
+      cell.className = 'conn-mode-cell';
+      const btn = document.createElement('button');
+      btn.className = 'conn-mode-btn';
+      btn.type = 'button';
+      btn.setAttribute('role', 'tab');
+      btn.dataset.connMode = p.provider;
+      if (connectionMode === p.provider) btn.classList.add('active');
+      btn.innerHTML = connModeInner(p);
+      btn.onclick = () => setConnectionMode(p.provider);
+      const rm = document.createElement('button');
+      rm.className = 'conn-mode-remove';
+      rm.type = 'button';
+      rm.title = 'Remove ' + p.label;
+      rm.textContent = '×';
+      rm.onclick = (e) => { e.stopPropagation(); removeProvider(p.provider); };
+      cell.appendChild(btn);
+      cell.appendChild(rm);
+      toggle.appendChild(cell);
+    }
+
+    // Add tile — only when there's at least one grid left to add.
+    const remaining = available.filter((p) => !added.includes(p.provider));
+    if (remaining.length) toggle.appendChild(buildAddTile(remaining));
+  }
+
+  // The "+ Add cloud device" tile and its click-to-open menu of remaining grids.
+  function buildAddTile(remaining) {
+    const tile = document.createElement('div');
+    tile.className = 'conn-mode-add';
+    tile.innerHTML =
+      '<span class="conn-mode-add-plus">+</span><span>Add cloud device</span>';
+    const menu = document.createElement('div');
+    menu.className = 'conn-mode-add-menu';
+    for (const p of remaining) {
+      const item = document.createElement('button');
+      item.className = 'conn-mode-add-item';
+      item.type = 'button';
+      item.innerHTML = connModeInner(p);
+      item.onclick = (e) => { e.stopPropagation(); addProvider(p.provider); };
+      menu.appendChild(item);
+    }
+    tile.appendChild(menu);
+    tile.onclick = () => toggleAddMenu(tile);
+    return tile;
+  }
+
+  function toggleAddMenu(tile) {
+    const isOpen = tile.classList.toggle('open');
+    if (isOpen) {
+      // Close on the next outside click (scoped; removed as soon as it fires).
+      const onDoc = (e) => {
+        if (!tile.contains(e.target)) closeAddMenu();
+      };
+      tile._closeAddMenu = onDoc;
+      setTimeout(() => document.addEventListener('click', onDoc), 0);
+    } else {
+      closeAddMenu();
+    }
+  }
+  function closeAddMenu() {
+    const tile = document.querySelector('.conn-mode-add.open');
+    if (!tile) return;
+    tile.classList.remove('open');
+    if (tile._closeAddMenu) {
+      document.removeEventListener('click', tile._closeAddMenu);
+      tile._closeAddMenu = null;
+    }
+  }
+
+  function addProvider(p) {
+    const s = getAddedProviders();
+    if (!s.includes(p)) s.push(p);
+    saveAddedProviders(s);
+    closeAddMenu();
+    renderConnModeButtons();
+    setConnectionMode(p); // auto-select the freshly added grid
+  }
+  function removeProvider(p) {
+    saveAddedProviders(getAddedProviders().filter((x) => x !== p));
+    if (connectionMode === p) setConnectionMode('local'); // fall back if it was active
+    renderConnModeButtons();
+  }
+
   function isCloudMode() {
-    return connectionMode === 'browserstack' || connectionMode === 'lambdatest';
+    return connectionMode !== 'local';
   }
 
   function setConnectionMode(mode) {
@@ -4230,7 +4434,7 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
     } else {
       if (local) local.style.display = 'none';
       if (cloud) cloud.style.display = '';
-      const provLabel = mode === 'browserstack' ? 'BrowserStack' : 'LambdaTest';
+      const provLabel = cloudLabel(mode);
       if (intro) intro.innerHTML = 'Connecting to <strong>' + provLabel + '</strong> cloud devices. Enter your credentials below — <strong>Next</strong> unlocks once they are filled in.';
       const titleEl = document.getElementById('cloud-creds-title');
       if (titleEl) titleEl.textContent = provLabel + ' credentials';
@@ -4253,17 +4457,34 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
   }
 
   /** Re-skin the Capabilities form for the current connection mode. */
+  // True when the active cloud provider needs the Package / Bundle ID up front
+  // (it can't read it back from the session — e.g. LambdaTest). Registry-driven
+  // via the provider metadata's requireBundleId flag.
+  function bundleRequired() {
+    if (!isCloudMode()) return false;
+    const m = cloudProvidersMeta[connectionMode];
+    return !!(m && m.requireBundleId);
+  }
+
   function applyModeToStep3() {
     const cloud = isCloudMode();
     // App field placeholder + hint.
     const appInput = document.getElementById('cap-app');
     if (appInput) {
-      appInput.placeholder = cloud
-        ? (connectionMode === 'browserstack'
-            ? 'bs://… (uploaded via BrowserStack app-upload)'
-            : 'lt://… (uploaded via LambdaTest app-upload)')
-        : 'optional · path to .apk / .ipa / .app';
+      if (cloud) {
+        const m = cloudProvidersMeta[connectionMode];
+        const scheme = (m && m.prebuiltScheme) || '';
+        appInput.placeholder = scheme + '… (uploaded via ' + cloudLabel(connectionMode) + ' app-upload)';
+      } else {
+        appInput.placeholder = 'optional · path to .apk / .ipa / .app';
+      }
     }
+    // Package field: required (not optional) for grids that can't resolve it.
+    const bundleInput = document.getElementById('cap-bundle');
+    if (bundleInput) {
+      bundleInput.placeholder = (bundleRequired() ? 'required' : 'optional') + ' · com.example.app';
+    }
+    updateBundleLabel();
     // Browse button is meaningless for cloud — no native picker uploads to cloud yet.
     const browseBtn = document.getElementById('btn-app-browse');
     if (browseBtn) browseBtn.style.display = cloud ? 'none' : '';
@@ -4330,9 +4551,8 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
     if (keyEl) keyEl.value = key;
     const hint = $('cloud-creds-hint');
     if (hint) {
-      const envName = mode === 'browserstack'
-        ? 'BROWSERSTACK_USERNAME / BROWSERSTACK_ACCESS_KEY'
-        : 'LAMBDATEST_USERNAME / LAMBDATEST_ACCESS_KEY';
+      const meta = cloudProvidersMeta[mode];
+      const envName = (meta && meta.envVars ? meta.envVars : []).join(' / ');
       hint.innerHTML = fromCache
         ? '✓ Restored from this session.'
         : ((user || key)
@@ -4433,11 +4653,18 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
     // Cloud / remote URLs aren't on the local filesystem — the cloud
     // session resolves them on its own; we skip parsing aapt/plutil
     // and just acknowledge the URL so the user sees positive feedback.
-    if (/^(bs|lt|https?):\\/\\//i.test(path)) {
-      const kind = path.toLowerCase().startsWith('bs://') ? 'BrowserStack URL'
-        : path.toLowerCase().startsWith('lt://') ? 'LambdaTest URL'
-        : 'remote URL';
-      status.textContent = '✓ ' + kind + ' — bundle id will come from the cloud session.';
+    const lower = path.toLowerCase();
+    const schemeMatch = cloudProvidersList.find(
+      (p) => p.prebuiltScheme && lower.startsWith(p.prebuiltScheme.toLowerCase()),
+    );
+    if (schemeMatch || /^https?:\\/\\//i.test(lower)) {
+      const kind = schemeMatch ? schemeMatch.label + ' URL' : 'remote URL';
+      // Only promise auto bundle-id when the grid actually reads it back; for
+      // grids that require it up front (LambdaTest), tell the user to fill it.
+      const tail = schemeMatch && schemeMatch.requireBundleId && !schemeMatch.resolvesBundleId
+        ? ' — enter the app Package / Bundle ID below (required for ' + schemeMatch.label + ').'
+        : ' — bundle id will come from the cloud session.';
+      status.textContent = '✓ ' + kind + tail;
       status.className = 'app-inspect-status ok';
       return;
     }
@@ -4599,7 +4826,8 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
 
   function updateBundleLabel() {
     const platform = $('cap-platform').value;
-    $('cap-bundle-label').textContent = platform === 'iOS' ? 'Bundle ID' : 'Package';
+    const base = platform === 'iOS' ? 'Bundle ID' : 'Package';
+    $('cap-bundle-label').textContent = bundleRequired() ? base + ' *' : base;
   }
 
   /**
@@ -4611,7 +4839,7 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
     const nextBtn = $('btn-step-next');
     if (wizardStep === 1) {
       if (isCloudMode()) {
-        const provLabel = connectionMode === 'browserstack' ? 'BrowserStack' : 'LambdaTest';
+        const provLabel = cloudLabel(connectionMode);
         if (cloudCredsValid) {
           summary.innerHTML = '<strong>' + provLabel + ' creds set</strong> — continue to pick a device.';
           nextBtn.disabled = false;
@@ -4652,8 +4880,20 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
     const f = readFormCaps();
     const auto = f.platform === 'iOS' ? 'XCUITest' : 'UiAutomator2';
     const dev = f.device ? ' · <strong>' + escapeHtml(f.device) + '</strong>' : '';
+    const connectBtn = $('btn-connect');
+    // Block connect when the provider needs a Package / Bundle ID and it's blank
+    // — otherwise the server rejects it after a round-trip with a raw error.
+    if (bundleRequired() && !f.bundle) {
+      const field = f.platform === 'iOS' ? 'Bundle ID' : 'Package';
+      summary.innerHTML =
+        'Enter the app <strong>' + field + '</strong> above — required for <strong>' +
+        cloudLabel(connectionMode) + '</strong>.';
+      if (connectBtn) connectBtn.disabled = true;
+      return;
+    }
+    if (connectBtn) connectBtn.disabled = false;
     if (isCloudMode()) {
-      const provLabel = connectionMode === 'browserstack' ? 'BrowserStack' : 'LambdaTest';
+      const provLabel = cloudLabel(connectionMode);
       summary.innerHTML =
         'Connect to <strong>' + provLabel + '</strong> · <strong>' + f.platform + '</strong> · ' + auto + dev;
     } else {
@@ -4900,6 +5140,10 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
   // emulator only exists once it comes online.
   const bootingDevices = new Set();
   function bootingKey(dev) {
+    // Cloud devices share a name across OS versions, so keying Android on
+    // name would make two same-name/different-version tiles select together.
+    // Their synthetic udid (provider:platform:name:version) is unique — use it.
+    if (dev.cloud) return 'cloud:' + dev.udid;
     return dev.type === 'android'
       ? 'android:' + (dev.avdName || dev.name)
       : 'ios:' + dev.udid;
@@ -5258,7 +5502,7 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
     $('btn-connect').disabled = true;
     $('btn-connect').textContent = 'Connecting…';
     const targetLabel = isCloudMode()
-      ? (connectionMode === 'browserstack' ? 'BrowserStack hub' : 'LambdaTest hub')
+      ? cloudLabel(connectionMode) + ' hub'
       : (body.appium.host + ':' + body.appium.port);
     // Let the user abort a slow connect. Aborting the fetch stops the client
     // waiting; the /api/connect/cancel POST tells the server to tear down any

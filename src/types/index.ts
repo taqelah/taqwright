@@ -100,6 +100,11 @@ interface CloudDeviceConfigBase {
   enableCameraImageInjection?: boolean;
 }
 
+// Onboarding a new cloud grid adds one `XDeviceConfig` interface here plus one
+// arm to the `DeviceConfig` union below — the ONLY compile-time per-grid edit
+// left after the cloud refactor (types can't derive from the runtime
+// `CLOUD_SPECS` registry). Everything else (credentials, device catalog,
+// permission caps, UI display) derives from the grid's `CloudSpec`.
 export interface BrowserStackDeviceConfig extends CloudDeviceConfigBase {
   provider: 'browserstack';
 }
@@ -113,6 +118,21 @@ export type DeviceConfig =
   | LocalDeviceConfig
   | BrowserStackDeviceConfig
   | LambdaTestDeviceConfig;
+
+/**
+ * A single device entry from a cloud grid's catalog (BrowserStack / LambdaTest).
+ * `provider` is a runtime-derived string (see `CloudProviderName` in
+ * `src/providers/index.ts`) — the compile-time per-grid narrowing lives only in
+ * `DeviceConfig` above. Lives here (a leaf module) so the cloud specs in
+ * `src/providers/` and the inspector server can both reference it without a cycle.
+ */
+export interface CloudDevice {
+  provider: string;
+  platform: 'android' | 'ios';
+  deviceName: string;
+  osVersion: string;
+  realDevice: boolean;
+}
 
 /** Live session returned by a `DeviceProvider`. */
 export interface DeviceHandle {

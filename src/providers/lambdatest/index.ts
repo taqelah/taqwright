@@ -2,11 +2,49 @@ import {
   Platform,
   type TaqwrightUseOptions,
   type LambdaTestDeviceConfig,
+  type CloudDevice,
 } from '../../types/index.js';
 import { CloudProvider, type CloudSpec } from '../cloud.js';
 
 const SESSION_API = 'https://mobile-api.lambdatest.com/mobile-automation/api/v1';
 const UPLOAD_API = 'https://manual-api.lambdatest.com/app/upload/realDevice';
+// The catalog list is region-scoped; `us` is the default. This is the one place
+// the region lives now — a visible per-grid fact rather than a hardcode buried
+// in the inspector server.
+const DEVICE_LIST_API = `${SESSION_API}/list?region=us`;
+
+/**
+ * Parse LambdaTest's `/mobile-automation/api/v1/list` response into CloudDevices.
+ * Shape-tolerant: the array may be top-level, under `devices`, or under `data`
+ * (LambdaTest wraps several endpoints under `data`), and per-device field names
+ * vary — so we fall back across the common spellings. Pure; exported for testing.
+ */
+export function parseLambdatestDevices(raw: unknown): CloudDevice[] {
+  const r = (raw ?? {}) as Record<string, unknown>;
+  const arr: unknown[] = Array.isArray(raw)
+    ? raw
+    : Array.isArray(r.devices)
+      ? (r.devices as unknown[])
+      : Array.isArray(r.data)
+        ? (r.data as unknown[])
+        : [];
+  const devices: CloudDevice[] = [];
+  for (const item of arr) {
+    const d = item as Record<string, unknown>;
+    const name = d.deviceName ?? d.device ?? d.name;
+    if (!name) continue;
+    const os = String(d.platformName ?? d.platform ?? d.os ?? d.osName ?? '');
+    const version = d.osVersion ?? d.version ?? d.os_version ?? d.platformVersion;
+    devices.push({
+      provider: 'lambdatest',
+      platform: os.toLowerCase().includes('ios') ? 'ios' : 'android',
+      deviceName: String(name),
+      osVersion: version != null ? String(version) : '',
+      realDevice: true,
+    });
+  }
+  return devices;
+}
 
 /**
  * LambdaTest lists a few devices / OS versions under shorter names than the
@@ -86,7 +124,7 @@ export function buildCapabilities(use: TaqwrightUseOptions, projectName: string,
   };
 }
 
-const lambdaTestSpec: CloudSpec = {
+export const lambdaTestSpec: CloudSpec = {
   provider: 'lambdatest',
   credentialEnv: ['LAMBDATEST_USERNAME', 'LAMBDATEST_ACCESS_KEY'],
   prebuiltScheme: 'lt://',
@@ -126,6 +164,17 @@ const lambdaTestSpec: CloudSpec = {
   // is expected, so don't surface it as an error.
   strictSync: false,
   requireBundleId: true,
+  permissionCapKeys: ['autoGrantPermissions', 'autoAcceptAlerts'],
+  catalog: {
+    listUrl: () => DEVICE_LIST_API,
+    parseDevices: parseLambdatestDevices,
+  },
+  display: {
+    label: 'LambdaTest',
+    subtitle: 'Real-device cloud',
+    icon: '☁',
+    logoUrl: '/static/cloud-vendors/lambdatest.png',
+  },
 };
 
 export class LambdaTestDeviceProvider extends CloudProvider {

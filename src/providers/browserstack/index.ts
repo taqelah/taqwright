@@ -2,10 +2,33 @@ import {
   Platform,
   type TaqwrightUseOptions,
   type BrowserStackDeviceConfig,
+  type CloudDevice,
 } from '../../types/index.js';
 import { CloudProvider, type CloudSpec } from '../cloud.js';
 
 const APP_AUTOMATE = 'https://api-cloud.browserstack.com/app-automate';
+
+/**
+ * Parse BrowserStack's `app-automate/devices.json` (a flat array) into
+ * CloudDevices. Pure; the HTTP fetch + status check live in the inspector server.
+ */
+export function parseBrowserStackDevices(raw: unknown): CloudDevice[] {
+  const arr = Array.isArray(raw)
+    ? (raw as Array<{
+        device: string;
+        os: string;
+        os_version: string;
+        realMobile?: string | boolean;
+      }>)
+    : [];
+  return arr.map((d) => ({
+    provider: 'browserstack',
+    platform: d.os.toLowerCase().includes('ios') ? 'ios' : 'android',
+    deviceName: d.device,
+    osVersion: d.os_version,
+    realDevice: d.realMobile === true || d.realMobile === 'true',
+  }));
+}
 
 /** Build the per-session capabilities BrowserStack's W3C endpoint expects. */
 function buildCapabilities(use: TaqwrightUseOptions, projectName: string, appUrl: string) {
@@ -70,7 +93,7 @@ function buildCapabilities(use: TaqwrightUseOptions, projectName: string, appUrl
   };
 }
 
-const browserStackSpec: CloudSpec = {
+export const browserStackSpec: CloudSpec = {
   provider: 'browserstack',
   credentialEnv: ['BROWSERSTACK_USERNAME', 'BROWSERSTACK_ACCESS_KEY'],
   prebuiltScheme: 'bs://',
@@ -94,6 +117,17 @@ const browserStackSpec: CloudSpec = {
       : JSON.stringify({ name: details.name }),
   }),
   strictSync: true,
+  permissionCapKeys: ['appium:autoGrantPermissions', 'appium:autoAcceptAlerts'],
+  catalog: {
+    listUrl: () => `${APP_AUTOMATE}/devices.json`,
+    parseDevices: parseBrowserStackDevices,
+  },
+  display: {
+    label: 'BrowserStack',
+    subtitle: 'App Automate cloud devices',
+    icon: '☁',
+    logoUrl: '/static/cloud-vendors/browserstack.jpeg',
+  },
   // BrowserStack reports the installed app name back via its session API.
   resolveBundleId: async (sessionId, authHeader) => {
     const res = await fetch(`${APP_AUTOMATE}/sessions/${sessionId}.json`, {
