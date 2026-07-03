@@ -3,7 +3,11 @@
 
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { InspectorSession, applyLocalCapabilityDefaults } from '../dist/inspector/session.js';
+import {
+  InspectorSession,
+  applyLocalCapabilityDefaults,
+  buildCloudConnectUse,
+} from '../dist/inspector/session.js';
 import { Platform } from '../dist/types/index.js';
 import { makeFakeDriver } from './fake-driver.js';
 
@@ -35,6 +39,79 @@ describe('applyLocalCapabilityDefaults', () => {
     applyLocalCapabilityDefaults(caps, 'android');
     assert.equal(caps['appium:chromedriverAutodownload'], false);
     assert.equal(caps['appium:nativeWebScreenshot'], false);
+  });
+});
+
+describe('buildCloudConnectUse', () => {
+  const base = {
+    provider: 'lambdatest',
+    user: 'u',
+    key: 'k',
+    platform: 'android',
+    deviceName: 'Galaxy S24',
+    osVersion: '14',
+    appUrl: 'lt://APP',
+    appBundleId: 'com.example.app',
+  };
+  const LT_PERM = ['autoGrantPermissions', 'autoAcceptAlerts'];
+
+  test('maps the device block, build path, and platform', () => {
+    const use = buildCloudConnectUse(base, LT_PERM);
+    assert.equal(use.platform, Platform.ANDROID);
+    assert.deepEqual(use.device, {
+      provider: 'lambdatest',
+      name: 'Galaxy S24',
+      osVersion: '14',
+      orientation: 'portrait',
+    });
+    assert.equal(use.buildPath, 'lt://APP');
+    assert.equal(use.appBundleId, 'com.example.app');
+  });
+
+  test('ios platform maps to Platform.IOS', () => {
+    const use = buildCloudConnectUse({ ...base, platform: 'ios' }, LT_PERM);
+    assert.equal(use.platform, Platform.IOS);
+  });
+
+  test('honors an explicit orientation', () => {
+    const use = buildCloudConnectUse({ ...base, orientation: 'landscape' }, LT_PERM);
+    assert.equal(use.device.orientation, 'landscape');
+  });
+
+  test('turns each permission cap OFF for codegen (grid dialect)', () => {
+    const use = buildCloudConnectUse(base, LT_PERM);
+    assert.equal(use.capabilities.autoGrantPermissions, false);
+    assert.equal(use.capabilities.autoAcceptAlerts, false);
+    // BrowserStack dialect (appium:-prefixed) flows through the same way.
+    const bs = buildCloudConnectUse(base, ['appium:autoGrantPermissions']);
+    assert.equal(bs.capabilities['appium:autoGrantPermissions'], false);
+  });
+
+  test('a user-set permission cap wins over the codegen override', () => {
+    const use = buildCloudConnectUse(
+      { ...base, capabilities: { autoGrantPermissions: true } },
+      LT_PERM,
+    );
+    assert.equal(use.capabilities.autoGrantPermissions, true);
+    assert.equal(use.capabilities.autoAcceptAlerts, false);
+  });
+
+  test('strips local-emulator-only caps carried over from the form', () => {
+    const use = buildCloudConnectUse(
+      {
+        ...base,
+        capabilities: {
+          'appium:avd': 'Pixel_7',
+          'appium:avdLaunchTimeout': 90000,
+          'appium:foo': 'keep',
+        },
+      },
+      LT_PERM,
+    );
+    assert.equal('appium:avd' in use.capabilities, false);
+    assert.equal('appium:avdLaunchTimeout' in use.capabilities, false);
+    // Non-emulator user caps pass through untouched.
+    assert.equal(use.capabilities['appium:foo'], 'keep');
   });
 });
 

@@ -110,6 +110,38 @@ export interface ConnectRequest {
 }
 
 /**
+ * Build the `TaqwrightUseOptions` a cloud connect hands to `createDeviceProvider`.
+ * Pure (no device/network) so it's unit-tested; `connectCloud` wraps it with the
+ * env-var + provider-driving side effects. Codegen is interactive, so it turns the
+ * grid's permission-grant caps OFF (`permissionCapKeys`, each grid's own dialect)
+ * unless the user set them — letting the user see and record the grant step. Local-
+ * emulator-only caps are stripped (the form seeds from the local config).
+ */
+export function buildCloudConnectUse(
+  cloud: CloudConnectRequest,
+  permissionCapKeys: readonly string[],
+): TaqwrightUseOptions {
+  const platform = cloud.platform === 'ios' ? Platform.IOS : Platform.ANDROID;
+  const userCloudCaps = omitLocalEmulatorCaps(cloud.capabilities ?? {});
+  const codegenPermOff: Record<string, unknown> = {};
+  for (const k of permissionCapKeys) {
+    if (!(k in userCloudCaps)) codegenPermOff[k] = false;
+  }
+  return {
+    platform,
+    device: {
+      provider: cloud.provider,
+      name: cloud.deviceName,
+      osVersion: cloud.osVersion,
+      orientation: cloud.orientation ?? 'portrait',
+    },
+    buildPath: cloud.appUrl,
+    appBundleId: cloud.appBundleId,
+    capabilities: { ...codegenPermOff, ...userCloudCaps },
+  } as TaqwrightUseOptions;
+}
+
+/**
  * Stateful holder for a single inspector session: the optional WebDriver
  * client, the optional Appium child process we may have spawned, and the
  * recorder. The HTTP server reads/writes this object.
@@ -363,45 +395,22 @@ export class InspectorSession {
     // Provider classes read credentials from process.env under each grid's
     // own var names — which the spec already declares in `credentialEnv`, so
     // set them from there rather than branching per provider.
+    // Provider classes read credentials from process.env under each grid's
+    // own var names — which the spec already declares in `credentialEnv`, so
+    // set them from there rather than branching per provider.
     const spec = getSpec(cloud.provider);
     const [userVar, keyVar] = spec.credentialEnv;
     process.env[userVar] = cloud.user;
     process.env[keyVar] = cloud.key;
-    const platform = cloud.platform === 'ios' ? Platform.IOS : Platform.ANDROID;
-    // Codegen is interactive: unlike `taqwright test`, don't auto-accept
-    // permission / system alerts (location, gallery, …) so the user can see and
-    // record the grant step. Override the providers' true-defaults via
-    // use.capabilities (merged last by both providers), using each provider's
-    // own key naming. An explicit user value still wins.
-    // Strip local-emulator-only caps (appium:avd, …) — the inspector seeds its
-    // form from the local config, so a cloud selection can carry them in; they'd
-    // be wrong on a cloud provider (which picks the device by name + version).
-    const userCloudCaps = omitLocalEmulatorCaps(cloud.capabilities ?? {});
-    const permKeys = spec.permissionCapKeys;
-    const codegenPermOff: Record<string, unknown> = {};
-    for (const k of permKeys) {
-      if (!(k in userCloudCaps)) codegenPermOff[k] = false;
-    }
-    const use = {
-      platform,
-      device: {
-        provider: cloud.provider,
-        name: cloud.deviceName,
-        osVersion: cloud.osVersion,
-        orientation: cloud.orientation ?? 'portrait',
-      },
-      buildPath: cloud.appUrl,
-      appBundleId: cloud.appBundleId,
-      capabilities: { ...codegenPermOff, ...userCloudCaps },
-    } as TaqwrightUseOptions;
+    const use = buildCloudConnectUse(cloud, spec.permissionCapKeys);
     const provider = createDeviceProvider(use, cloud.projectName ?? 'inspector');
     if (provider.globalSetup) await provider.globalSetup();
     const handle = await provider.getDevice();
     this.activeProvider = provider;
     this.driver = handle.driver;
-    this.platform = platform;
-    // Store only the user's caps; don't leak the codegen-only override.
-    this.lastCapabilities = userCloudCaps;
+    this.platform = use.platform;
+    // Store only the user's caps; don't leak the codegen-only permission override.
+    this.lastCapabilities = omitLocalEmulatorCaps(cloud.capabilities ?? {});
     this.currentContext = 'NATIVE_APP';
     await this.abortIfCancelled();
   }
