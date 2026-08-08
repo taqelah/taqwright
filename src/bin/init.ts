@@ -137,9 +137,7 @@ export async function runInit(argDir: string | undefined, opts: InitOptions = {}
       const platformInput =
         opts.platform ??
         ((await askChoice(rl, 'Platform', platformChoices(isMac), 'android')) as
-          | 'android'
-          | 'ios'
-          | 'both');
+          'android' | 'ios' | 'both');
       platforms = platformInput === 'both' ? ['android', 'ios'] : [platformInput as Platform];
       // npm install is mandatory (the scaffold is useless without deps) — no
       // prompt. `--no-install` is the explicit escape hatch for CI/offline.

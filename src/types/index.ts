@@ -114,10 +114,7 @@ export interface LambdaTestDeviceConfig extends CloudDeviceConfigBase {
 }
 
 export type DeviceConfig =
-  | EmulatorDeviceConfig
-  | LocalDeviceConfig
-  | BrowserStackDeviceConfig
-  | LambdaTestDeviceConfig;
+  EmulatorDeviceConfig | LocalDeviceConfig | BrowserStackDeviceConfig | LambdaTestDeviceConfig;
 
 /**
  * A single device entry from a cloud grid's catalog (BrowserStack / LambdaTest).
@@ -351,13 +348,7 @@ export interface TaqwrightConfig extends TestRunnerOptions {
   fullyParallel?: boolean;
   forbidOnly?: boolean;
   reporter?:
-    | 'list'
-    | 'html'
-    | 'json'
-    | 'junit'
-    | 'line'
-    | 'dot'
-    | Array<[string] | [string, unknown]>;
+    'list' | 'html' | 'json' | 'junit' | 'line' | 'dot' | Array<[string] | [string, unknown]>;
   globalSetup?: string | string[];
   globalTeardown?: string | string[];
 }

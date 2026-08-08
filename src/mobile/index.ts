@@ -914,8 +914,7 @@ export class Mobile {
   async getCurrentApp(): Promise<{ bundleId: string }> {
     if (this.platform === Platform.IOS) {
       const info = (await this.driver.executeScript('mobile: activeAppInfo', [{}])) as
-        | { bundleId?: string }
-        | undefined;
+        { bundleId?: string } | undefined;
       return { bundleId: info?.bundleId ?? '' };
     }
     const pkg = await this.driver.executeScript('mobile: getCurrentPackage', [{}]);
