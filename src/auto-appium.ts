@@ -69,8 +69,7 @@ export function autoStartTargets(
     if (filterSet.size > 0 && !filterSet.has(project.name ?? '')) continue;
 
     const device = project.use?.device as
-      | { provider?: string; pool?: unknown[]; autoDiscover?: boolean }
-      | undefined;
+      { provider?: string; pool?: unknown[]; autoDiscover?: boolean } | undefined;
 
     // Cloud projects run on a remote grid, not a local Appium — a stray
     // `appium.autoStart` on one must never spawn a useless server.
