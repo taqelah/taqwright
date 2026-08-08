@@ -430,6 +430,11 @@ async function handle(
         // Tenant-hosted grids (e.g. Digital.ai) need a cloud-server URL up
         // front instead of a fixed hub — the form shows that field for them.
         needsCloudServer: !!s.tenantUrlEnvVar,
+        // ...but only grids with NO default actually gate on it. pCloudy shows
+        // the field (enterprise tenants override it) while staying optional,
+        // prefilled with its public cloud.
+        cloudServerRequired: !!s.tenantUrlEnvVar && !s.tenantUrlDefault,
+        cloudServerDefault: s.tenantUrlDefault ?? '',
         appOptional: !!s.appOptional,
       })),
     );
@@ -448,7 +453,9 @@ async function handle(
       env[s.provider] = {
         user: userVar ? (process.env[userVar] ?? '') : '',
         key: process.env[keyVar] ?? '',
-        ...(s.tenantUrlEnvVar ? { cloudServer: process.env[s.tenantUrlEnvVar] ?? '' } : {}),
+        ...(s.tenantUrlEnvVar
+          ? { cloudServer: process.env[s.tenantUrlEnvVar] ?? s.tenantUrlDefault ?? '' }
+          : {}),
       };
     }
     json(res, 200, env);
@@ -1600,24 +1607,39 @@ async function fetchCloudDevices(
   } else if (!key) {
     throw new Error(`${provider} requires an access key.`);
   }
-  if (spec.tenantUrlEnvVar && !cloudServer) {
-    throw new Error(`${provider} requires a cloud server URL.`);
+  // Tenant-hosted grids resolve their list URL from an env var rather than a
+  // fixed hostname. Digital.ai has no sensible default so the field is
+  // required; pCloudy falls back to its public cloud.
+  if (spec.tenantUrlEnvVar) {
+    const resolved = cloudServer || spec.tenantUrlDefault;
+    if (!resolved) {
+      throw new Error(`${provider} requires a cloud server URL.`);
+    }
+    // Set it for the duration of this call so the spec's `listUrl()` /
+    // `fetchRaw` (synchronous functions of `process.env`) see it.
+    process.env[spec.tenantUrlEnvVar] = resolved;
   }
-  // Tenant-hosted grids (Digital.ai) resolve their list URL from an env var
-  // rather than a fixed hostname — set it for the duration of this call so
-  // `spec.catalog.listUrl()` (a synchronous function of `process.env`) sees it.
-  if (spec.tenantUrlEnvVar) process.env[spec.tenantUrlEnvVar] = cloudServer;
   const [userVar, keyVar] =
     spec.credentialEnv.length === 2 ? spec.credentialEnv : [undefined, spec.credentialEnv[0]];
   const authEnv: Record<string, string | undefined> = { [keyVar]: key };
   if (userVar) authEnv[userVar] = user;
-  const r = await fetch(spec.catalog.listUrl(), {
-    headers: { Authorization: cloudAuthHeader(spec, authEnv) },
-  });
-  if (!r.ok) {
-    throw new Error(`${spec.display.label} device list returned ${r.status} — check credentials.`);
+  const authHeader = cloudAuthHeader(spec, authEnv);
+  const listUrl = spec.catalog.listUrl();
+  // Grids whose catalog needs a POST body, a pre-fetched token, or more than
+  // one request own their HTTP via `fetchRaw`; everyone else takes the shared
+  // GET below.
+  let raw: unknown;
+  if (spec.catalog.fetchRaw) {
+    raw = await spec.catalog.fetchRaw({ authHeader, listUrl });
+  } else {
+    const r = await fetch(listUrl, { headers: { Authorization: authHeader } });
+    if (!r.ok) {
+      throw new Error(
+        `${spec.display.label} device list returned ${r.status} — check credentials.`,
+      );
+    }
+    raw = await r.json();
   }
-  const raw = await r.json();
   const devices = spec.catalog.parseDevices(raw);
   if (devices.length === 0) {
     // A 200 with an unrecognized shape used to yield a silent empty list. Surface

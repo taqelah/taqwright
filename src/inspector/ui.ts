@@ -4458,6 +4458,13 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
       const userField = document.getElementById('cloud-user-field');
       if (serverField) serverField.style.display = m && m.needsCloudServer ? '' : 'none';
       if (userField) userField.style.display = cloudNeedsUser() ? '' : 'none';
+      // Grids with a default cloud (pCloudy) show the field but don't demand
+      // it — advertise the default as the placeholder.
+      const serverInput = document.getElementById('cloud-server');
+      if (serverInput) {
+        serverInput.placeholder =
+          (m && m.cloudServerDefault) || 'https://yourtenant.experitest.com';
+      }
       // Restore the new provider's creds: in-memory cache first, env vars
       // as fallback. Always overwrites — no leakage from the previous one.
       loadCloudCredsForMode(mode);
@@ -4526,7 +4533,7 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
       const r = await fetch('/api/cloud/env');
       cloudEnvCache = await r.json();
     } catch {
-      cloudEnvCache = { browserstack: { user: '', key: '' }, lambdatest: { user: '', key: '' }, digitalai: { key: '', cloudServer: '' } };
+      cloudEnvCache = { browserstack: { user: '', key: '' }, lambdatest: { user: '', key: '' }, digitalai: { key: '', cloudServer: '' }, pcloudy: { user: '', key: '', cloudServer: '' } };
     }
     return cloudEnvCache;
   }
@@ -4534,7 +4541,7 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
   // Per-provider in-memory cache of what the user has typed. Lets the
   // user toggle between cloud grids without losing the creds for any one
   // of them.
-  const cloudCredsByProvider = { browserstack: null, lambdatest: null, digitalai: null };
+  const cloudCredsByProvider = { browserstack: null, lambdatest: null, digitalai: null, pcloudy: null };
 
   // Save the currently-displayed cloud creds into the cache for the
   // current cloud mode (no-op when local).
@@ -4582,7 +4589,11 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
     if (hint) {
       const meta = cloudProvidersMeta[mode];
       const envName = (meta && meta.envVars ? meta.envVars : []).join(' / ');
-      const anyVal = user || key || cloudServer;
+      // Gate on CREDENTIALS only — the hint names the credential env vars, and
+      // a cloud-server value can come from the grid's built-in default rather
+      // than from the environment, which would make this claim a prefill that
+      // never happened.
+      const anyVal = user || key;
       hint.innerHTML = fromCache
         ? '✓ Restored from this session.'
         : (anyVal
@@ -4600,7 +4611,7 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
     const k = ($('cloud-key').value || '').trim();
     const srv = ($('cloud-server').value || '').trim();
     const m = cloudProvidersMeta[connectionMode];
-    const valid = (!cloudNeedsUser() || !!u) && !!k && (!(m && m.needsCloudServer) || !!srv);
+    const valid = (!cloudNeedsUser() || !!u) && !!k && (!(m && m.cloudServerRequired) || !!srv);
     if (valid) {
       pill.className = 'pill live';
       label.textContent = 'creds detected';
@@ -5031,7 +5042,7 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
         const k = ($('cloud-key').value || '').trim();
         const srv = ($('cloud-server').value || '').trim();
         const m = cloudProvidersMeta[connectionMode];
-        const credsMissing = (cloudNeedsUser() && !u) || !k || ((m && m.needsCloudServer) && !srv);
+        const credsMissing = (cloudNeedsUser() && !u) || !k || ((m && m.cloudServerRequired) && !srv);
         if (credsMissing) {
           lastDeviceData = { android: [], ios: [], toolsMissing: {} };
           $('devices-warn').innerHTML =
@@ -5066,6 +5077,9 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
               realDevice: !!d.realDevice,
               available: available,
               status: d.status || '',
+              // Grids that select by an opaque composite id (pCloudy) carry it
+              // through verbatim, so we never rebuild it from name + version.
+              fullName: d.fullName || '',
             },
           };
           (d.platform === 'ios' ? ios : android).push(dev);
@@ -5382,6 +5396,7 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
         platform: dev.type,
         deviceName: dev.name,
         osVersion: dev.osVersion ?? '',
+        deviceFullName: dev.cloud.fullName || '',
       };
       $('cap-udid').value = '';
       // Cloud picks the device by name + version — drop any local-emulator-only
@@ -5546,6 +5561,9 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
           platform: form.platform === 'iOS' ? 'ios' : 'android',
           deviceName: form.device,
           osVersion: form.version,
+          // Exact catalog id when the grid uses one (pCloudy); '' elsewhere,
+          // and the server omits the key entirely when empty.
+          deviceFullName: selectedCloudDevice ? selectedCloudDevice.deviceFullName || '' : '',
           appUrl: form.app,
           appBundleId: form.bundle,
           capabilities: extraCaps,

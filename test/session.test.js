@@ -96,6 +96,24 @@ describe('buildCloudConnectUse', () => {
     assert.equal(use.capabilities.autoAcceptAlerts, false);
   });
 
+  test('carries a grid-specific device id through to use.device', () => {
+    // pCloudy selects on a composite catalog name; the picker sends it verbatim
+    // so the session never relies on one rebuilt from deviceName + osVersion.
+    const use = buildCloudConnectUse(
+      { ...base, provider: 'pcloudy', deviceFullName: 'Samsung_GalaxyS24_Android_14' },
+      LT_PERM,
+    );
+    assert.equal(use.device.deviceFullName, 'Samsung_GalaxyS24_Android_14');
+  });
+
+  test('omits deviceFullName entirely when the grid does not send one', () => {
+    const use = buildCloudConnectUse(base, LT_PERM);
+    assert.equal('deviceFullName' in use.device, false);
+    // An empty string is treated as absent, not as a selector.
+    const blank = buildCloudConnectUse({ ...base, deviceFullName: '' }, LT_PERM);
+    assert.equal('deviceFullName' in blank.device, false);
+  });
+
   test('strips local-emulator-only caps carried over from the form', () => {
     const use = buildCloudConnectUse(
       {
