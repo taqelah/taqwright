@@ -842,13 +842,16 @@ export default defineConfig({
   projects: [
 ${projects},
 
-    // ─── Cloud examples (BrowserStack / LambdaTest) ─────────────────
+    // ─── Cloud examples (BrowserStack / LambdaTest / Digital.ai / pCloudy) ──
     // Uncomment a block below to add a cloud project. Set the matching
     // env vars before launching:
-    //   BROWSERSTACK_USERNAME / BROWSERSTACK_ACCESS_KEY
-    //   LAMBDATEST_USERNAME    / LAMBDATEST_ACCESS_KEY
-    // For now, cloud devices are wired through the inspector
-    // ('taqwright inspect'); cloud test-runner support lands separately.
+    //   BROWSERSTACK_USERNAME  / BROWSERSTACK_ACCESS_KEY
+    //   LAMBDATEST_USERNAME     / LAMBDATEST_ACCESS_KEY
+    //   DIGITALAI_CLOUD_SERVER  / DIGITALAI_ACCESS_KEY   (no username)
+    //   PCLOUDY_USERNAME        / PCLOUDY_API_KEY
+    //     + PCLOUDY_CLOUD_URL (optional — defaults to https://device.pcloudy.com)
+    // Cloud projects work in both the runner ('taqwright test') and the
+    // inspector ('taqwright inspect').
     //
     // {
     //   name: 'browserstack',
@@ -877,6 +880,43 @@ ${projects},
     //     resetBetweenTests: true,
     //     buildPath: 'lt://<app-id-from-app-upload>',
     //     appBundleId: 'com.example.MyApp',
+    //   },
+    // },
+    // {
+    //   name: 'digitalai',
+    //   use: {
+    //     platform: Platform.ANDROID,
+    //     device: {
+    //       provider: 'digitalai',
+    //       name: 'Galaxy S24',
+    //       osVersion: '14',
+    //       // deviceQuery: "@os='android' and @category='PHONE'", // optional: raw selection query (overrides name/osVersion)
+    //     },
+    //     resetBetweenTests: true,
+    //     // A local .apk/.ipa is uploaded automatically, or pass 'cloud:com.example.app'
+    //     // if the build is already in your Digital.ai cloud.
+    //     buildPath: '/absolute/path/to/app.apk',
+    //     appBundleId: 'com.example.app',
+    //   },
+    // },
+    // {
+    //   name: 'pcloudy',
+    //   use: {
+    //     platform: Platform.ANDROID,
+    //     device: {
+    //       provider: 'pcloudy',
+    //       name: 'Motorola Moto G5',
+    //       osVersion: '7.0.0',
+    //       // Required in practice — pCloudy names end with an opaque per-device
+    //       // alias that cannot be derived from name + osVersion. Copy the exact
+    //       // string from the 'taqwright inspect' device picker.
+    //       deviceFullName: 'Motorola_MotoG5_Android_7.0.0_ea8b0',
+    //       // durationInMinutes: 10, // booking window; must fit your account balance
+    //     },
+    //     // A local .apk/.ipa is uploaded automatically, or pass
+    //     // 'pcloudy:MyApp.apk' for a build already in your pCloudy Drive.
+    //     buildPath: '/absolute/path/to/app.apk',
+    //     appBundleId: 'com.example.app',
     //   },
     // },
   ],
