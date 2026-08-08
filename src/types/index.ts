@@ -123,12 +123,30 @@ export interface DigitalAiDeviceConfig extends CloudDeviceConfigBase {
   deviceQuery?: string;
 }
 
+export interface PcloudyDeviceConfig extends CloudDeviceConfigBase {
+  provider: 'pcloudy';
+  /**
+   * pCloudy's exact catalog device name, e.g. `Motorola_MotoG5_Android_7.0.0_ea8b0`.
+   *
+   * Effectively REQUIRED in config: real pCloudy names end with an opaque
+   * per-device alias (`_ea8b0`) that cannot be reconstructed from `name` +
+   * `osVersion`, so without this the session fails with "Requested device is
+   * not available currently". Copy the exact string from `taqwright inspect`'s
+   * device picker. Optional in the type only because the inspector supplies it
+   * automatically.
+   */
+  deviceFullName?: string;
+  /** Device booking window, sent as `pCloudy_DurationInMinutes`. Defaults to 30. */
+  durationInMinutes?: number;
+}
+
 export type DeviceConfig =
   | EmulatorDeviceConfig
   | LocalDeviceConfig
   | BrowserStackDeviceConfig
   | LambdaTestDeviceConfig
-  | DigitalAiDeviceConfig;
+  | DigitalAiDeviceConfig
+  | PcloudyDeviceConfig;
 
 /**
  * A single device entry from a cloud grid's catalog (BrowserStack / LambdaTest).
@@ -151,6 +169,14 @@ export interface CloudDevice {
   available?: boolean;
   /** Human-readable status for display on non-available tiles (e.g. "In Use"). */
   status?: string;
+  /**
+   * The grid's own opaque device identifier, when it differs from
+   * `deviceName` + `osVersion` (pCloudy's `full_name`). Carried through the
+   * inspector's picker so the session references the exact catalog entry
+   * instead of a reconstructed string. Omitted by grids that select devices by
+   * name + version.
+   */
+  fullName?: string;
 }
 
 /** Live session returned by a `DeviceProvider`. */

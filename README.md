@@ -53,7 +53,7 @@ devices through Appium 3 over WebDriver. Record a test as you tap through the ap
 built-in `codegen`. Locate elements by role, text or label, and drop down to id, xpath,
 UiAutomator, NSPredicate or class-chain when an app has no accessibility metadata. Run the
 same spec against native, React Native and Flutter apps, on a local emulator or simulator
-or on a cloud device provider such as BrowserStack, LambdaTest or Digital.ai Testing.
+or on a cloud device provider such as BrowserStack, LambdaTest, Digital.ai Testing or pCloudy.
 
 ## Features
 
@@ -64,7 +64,7 @@ or on a cloud device provider such as BrowserStack, LambdaTest or Digital.ai Tes
 - **Retry assertions** — `expect(locator).toBeVisible()` polls until satisfied or times out
 - **Rich locators** — `getByRole` / `getByText` / `getByLabel`, plus `xpath` / UiAutomator / NSPredicate / class-chain
 - **Built-in codegen** — `npx taqwright codegen` records a test as you tap through the app
-- **Cloud devices in ~10 seconds** — point a project at BrowserStack, LambdaTest, or Digital.ai Testing with a few lines of config
+- **Cloud devices in ~10 seconds** — point a project at BrowserStack, LambdaTest, Digital.ai Testing, or pCloudy with a few lines of config
 - **Auto-discover devices** — `device.autoDiscover` finds and assigns emulators/simulators to each worker
 - **Parallel testing, handled** — taqwright spawns and manages a dedicated Appium session per worker automatically
 - **Traces, video & reports** — per-action traces, full-run videos, and Playwright reporters
@@ -166,6 +166,54 @@ export default defineConfig({
 ```
 
 Every `defineConfig` / `use` option is documented in the [Configuration guide](https://www.taqwright.dev/docs/configuration).
+
+### Cloud devices
+
+Point a project's `device.provider` at a cloud grid and taqwright handles the app
+upload, session capabilities and dashboard status reporting for you. The same
+config drives both `taqwright test` and the `taqwright inspect` / `codegen`
+inspector. Credentials are read from the environment — never from the config file.
+
+| Grid           | Env vars                                                               | `buildPath` for an already-uploaded build |
+| -------------- | ---------------------------------------------------------------------- | ----------------------------------------- |
+| `browserstack` | `BROWSERSTACK_USERNAME` / `BROWSERSTACK_ACCESS_KEY`                    | `bs://<app-id>`                           |
+| `lambdatest`   | `LAMBDATEST_USERNAME` / `LAMBDATEST_ACCESS_KEY`                        | `lt://<app-id>`                           |
+| `digitalai`    | `DIGITALAI_CLOUD_SERVER` / `DIGITALAI_ACCESS_KEY` (no username)        | `cloud:<bundleId>`                        |
+| `pcloudy`      | `PCLOUDY_USERNAME` / `PCLOUDY_API_KEY`, optionally `PCLOUDY_CLOUD_URL` | `pcloudy:<fileName>`                      |
+
+`DIGITALAI_CLOUD_SERVER` is your tenant URL (e.g. `https://mycloud.experitest.com`).
+`PCLOUDY_CLOUD_URL` defaults to `https://device.pcloudy.com` and only needs setting
+for an enterprise cloud.
+
+```ts
+{
+  name: 'pcloudy',
+  use: {
+    platform: Platform.ANDROID,
+    device: {
+      provider: 'pcloudy',
+      name: 'Motorola Moto G5',
+      osVersion: '7.0.0',
+      // Required in practice: pCloudy device names end with an opaque
+      // per-device alias that cannot be derived from name + osVersion.
+      // Copy the exact string from the `taqwright inspect` device picker.
+      deviceFullName: 'Motorola_MotoG5_Android_7.0.0_ea8b0',
+      // durationInMinutes: 10, // booking window; must fit your account balance
+    },
+    // A local .apk/.ipa is uploaded on first use. pCloudy references builds by
+    // FILE NAME rather than by URL, and it appends its own timestamp on
+    // upload — `app.apk` is stored as `app-1786171090.apk`. Take the name from
+    // the upload log and reuse it as `buildPath` to skip re-uploading.
+    buildPath: '/abs/path/to/app.apk',
+    appBundleId: 'com.example.app',
+  },
+}
+```
+
+Set `workers` above 1 on a cloud project to fan out independent sessions — cloud
+grids need no `device.pool`. Note the build is uploaded once **per worker**, so
+pre-uploading and using the scheme-prefixed `buildPath` above avoids repeat
+uploads.
 
 ## API reference
 

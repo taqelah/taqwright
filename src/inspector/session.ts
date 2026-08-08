@@ -96,6 +96,12 @@ export interface CloudConnectRequest {
   /** Raw Digital.ai device-selection query (overrides deviceName/osVersion). */
   deviceQuery?: string;
   /**
+   * pCloudy's exact catalog device name (e.g. `Samsung_GalaxyTabA_Android_7.1.1`).
+   * The picker carries it through verbatim so the session references the real
+   * catalog entry rather than one rebuilt from deviceName + osVersion.
+   */
+  deviceFullName?: string;
+  /**
    * Already-uploaded build, e.g. `bs://…`, `lt://…`, or `cloud:<bundleId>`.
    * Required unless the grid allows app-optional sessions (`CloudSpec.appOptional`,
    * e.g. Digital.ai attaching to a bare device).
@@ -145,6 +151,7 @@ export function buildCloudConnectUse(
       osVersion: cloud.osVersion,
       orientation: cloud.orientation ?? 'portrait',
       ...(cloud.deviceQuery ? { deviceQuery: cloud.deviceQuery } : {}),
+      ...(cloud.deviceFullName ? { deviceFullName: cloud.deviceFullName } : {}),
     },
     buildPath: cloud.appUrl,
     appBundleId: cloud.appBundleId,
@@ -412,8 +419,14 @@ export class InspectorSession {
     } else if (!cloud.key) {
       throw new Error(`${cloud.provider} requires an access key.`);
     }
-    if (spec.tenantUrlEnvVar && !cloud.cloudServer) {
-      throw new Error(`${cloud.provider} requires a cloud server URL.`);
+    // Tenant URL: required for grids with no default (Digital.ai), optional
+    // for grids that ship one (pCloudy's public cloud).
+    let tenantUrl: string | undefined;
+    if (spec.tenantUrlEnvVar) {
+      tenantUrl = cloud.cloudServer || spec.tenantUrlDefault;
+      if (!tenantUrl) {
+        throw new Error(`${cloud.provider} requires a cloud server URL.`);
+      }
     }
 
     // Provider classes read credentials (and, for tenant-hosted grids, the
@@ -424,7 +437,7 @@ export class InspectorSession {
       spec.credentialEnv.length === 2 ? spec.credentialEnv : [undefined, spec.credentialEnv[0]];
     if (userVar) process.env[userVar] = cloud.user;
     process.env[keyVar] = cloud.key;
-    if (spec.tenantUrlEnvVar) process.env[spec.tenantUrlEnvVar] = cloud.cloudServer as string;
+    if (spec.tenantUrlEnvVar && tenantUrl) process.env[spec.tenantUrlEnvVar] = tenantUrl;
 
     const use = buildCloudConnectUse(cloud, spec.permissionCapKeys);
     const provider = createDeviceProvider(use, cloud.projectName ?? 'inspector');

@@ -2,15 +2,29 @@ import { existsSync } from 'node:fs';
 import { extname } from 'node:path';
 
 /**
+ * A build reference that lives somewhere other than the local filesystem —
+ * `http(s)://`, or any cloud grid's prebuilt scheme (`bs://`, `lt://`,
+ * `cloud:`, `pcloudy:`, …). Matched generically rather than from a hardcoded
+ * list: that list silently went stale as grids were added, and a reference
+ * like `pcloudy:App.apk` then failed the local-file check below with a
+ * misleading "Build file not found".
+ *
+ * The `[a-z0-9+.-]+` (one or more, not zero) requires at least two characters
+ * before the colon, so a Windows drive letter (`C:\builds\app.apk`) is still
+ * treated as a local path.
+ */
+const REMOTE_BUILD_REF = /^[a-z][a-z0-9+.-]+:/i;
+
+/**
  * Throws if `buildPath` is missing or doesn't end in the expected extension.
+ * Remote references (see `REMOTE_BUILD_REF`) skip both checks — they are
+ * resolved by the grid, not by us.
  */
 export function validateBuildPath(buildPath: string | undefined, expectedExt: string): void {
   if (!buildPath) {
     throw new Error('Build path not found. Please set `buildPath` in your taqwright config.');
   }
-  const isUrl =
-    buildPath.startsWith('http') || buildPath.startsWith('bs://') || buildPath.startsWith('lt://');
-  if (!isUrl) {
+  if (!REMOTE_BUILD_REF.test(buildPath)) {
     if (!existsSync(buildPath)) {
       throw new Error(`Build file not found: ${buildPath}`);
     }

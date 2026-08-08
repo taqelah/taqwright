@@ -48,8 +48,14 @@ export interface CloudSpec {
   readonly upload: {
     /** Upload endpoint: a fixed URL, or a function of `buildPath` for tenant-hosted grids (URL vs file uploads may differ). */
     readonly endpoint: string | ((buildPath: string) => string);
-    urlBody(buildPath: string, projectName: string): URLSearchParams;
-    fileBody(file: Buffer, fileName: string, projectName: string): FormData;
+    /**
+     * Bodies may be async: grids whose upload needs a short-lived REST token
+     * (pCloudy exchanges one via `GET /api/access` and sends it as a form
+     * field) fetch it here, keeping the token exchange entirely inside the
+     * grid's own module. Synchronous builders remain assignable.
+     */
+    urlBody(buildPath: string, projectName: string): URLSearchParams | Promise<URLSearchParams>;
+    fileBody(file: Buffer, fileName: string, projectName: string): FormData | Promise<FormData>;
   };
   /** Map the upload response to the app reference (`appUrl`). Defaults to `data.app_url`. */
   uploadResponseToAppRef?(
@@ -75,6 +81,14 @@ export interface CloudSpec {
     reason?: string;
     name?: string;
   }): { script: string; args: unknown[] } | null;
+  /**
+   * Declare that this grid exposes NO pass/fail reporting mechanism at all
+   * (pCloudy). `syncTestDetails` already no-ops when both `syncRequest` and
+   * `reportStatusCommand` are absent, so this changes nothing at runtime — it
+   * exists so a spec that merely FORGOT to wire status reporting still fails
+   * the completeness test loudly, instead of the test being loosened again.
+   */
+  readonly noStatusReporting?: true;
   /** Surface a failed status-sync as an error (grids that 404 a not-yet-ready session set this false). */
   readonly strictSync: boolean;
   /** Resolve the installed bundle id after the session opens (grid session API). Optional. */
@@ -91,6 +105,14 @@ export interface CloudSpec {
    */
   readonly tenantUrlEnvVar?: string;
   /**
+   * Default value for `tenantUrlEnvVar`. Its presence is what makes the
+   * inspector's cloud-server field OPTIONAL (pCloudy ships a public cloud at
+   * `device.pcloudy.com` that most users never override) rather than REQUIRED
+   * (Digital.ai, where every customer has their own tenant and there is no
+   * sensible default). Grids that omit `tenantUrlEnvVar` ignore this.
+   */
+  readonly tenantUrlDefault?: string;
+  /**
    * The permission-related caps the inspector turns OFF during codegen so the
    * user can see and record permission/alert prompts. Expressed in THIS grid's
    * dialect (BrowserStack uses `appium:`-prefixed keys; LambdaTest uses bare
@@ -105,6 +127,14 @@ export interface CloudSpec {
    */
   readonly catalog: {
     listUrl(): string;
+    /**
+     * Optional override of the catalog HTTP call, for grids whose device list
+     * needs a POST body, a pre-fetched REST token, or MORE THAN ONE request
+     * (pCloudy queries `android` and `ios` separately). Return the raw payload
+     * this spec's `parseDevices` understands. Omit it and the inspector server
+     * does the shared `GET listUrl()` + `Authorization` header instead.
+     */
+    fetchRaw?(ctx: { authHeader: string; listUrl: string }): Promise<unknown>;
     parseDevices(raw: unknown): CloudDevice[];
   };
   /**
@@ -259,15 +289,17 @@ export class CloudProvider implements DeviceProvider {
     if (buildPath.startsWith(this.spec.prebuiltScheme)) {
       return buildPath;
     }
+    // `await` here so a grid can fetch a short-lived upload token while
+    // building its body; a synchronous builder resolves in a no-op microtask.
     let body: URLSearchParams | FormData;
     if (buildPath.startsWith('http')) {
-      body = this.spec.upload.urlBody(buildPath, this.projectName);
+      body = await this.spec.upload.urlBody(buildPath, this.projectName);
     } else {
       if (!fs.existsSync(buildPath)) {
         throw new Error(`Build file not found: ${buildPath}`);
       }
       const bytes = await fs.promises.readFile(buildPath);
-      body = this.spec.upload.fileBody(bytes, path.basename(buildPath), this.projectName);
+      body = await this.spec.upload.fileBody(bytes, path.basename(buildPath), this.projectName);
     }
     logger.log(`Uploading: ${buildPath}`);
     const endpoint =
