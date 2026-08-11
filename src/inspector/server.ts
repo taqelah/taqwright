@@ -35,7 +35,7 @@ import {
 import { INSPECTOR_HTML } from './ui.js';
 import { InspectorSession, type InspectorDefaults, type ConnectRequest } from './session.js';
 import { getSpec, CLOUD_SPECS, type CloudProviderName } from '../providers/index.js';
-import { basicAuth } from '../providers/cloud.js';
+import { cloudAuthHeader } from '../providers/cloud.js';
 
 const _require = createRequire(import.meta.url);
 
@@ -423,6 +423,14 @@ async function handle(
         // fill it in post-connect, so the form can leave it optional + promise it.
         requireBundleId: !!s.requireBundleId,
         resolvesBundleId: !!s.resolveBundleId,
+        // Bearer-auth grids (e.g. Digital.ai) authenticate with an access key
+        // alone — a single-element `credentialEnv` — so the form hides the
+        // username field for them.
+        needsUser: s.credentialEnv.length === 2,
+        // Tenant-hosted grids (e.g. Digital.ai) need a cloud-server URL up
+        // front instead of a fixed hub — the form shows that field for them.
+        needsCloudServer: !!s.tenantUrlEnvVar,
+        appOptional: !!s.appOptional,
       })),
     );
     return;
@@ -430,12 +438,18 @@ async function handle(
 
   // ─── Cloud devices: env probe + catalog fetch ────────────────
   if (method === 'GET' && url === '/api/cloud/env') {
-    // Registry-driven: each grid's credential env-var names come from its spec,
-    // so a newly registered grid is prefilled without editing this handler.
-    const env: Record<string, { user: string; key: string }> = {};
+    // Registry-driven: each grid's credential env-var names (and, for
+    // tenant-hosted grids, `tenantUrlEnvVar`) come from its spec, so a newly
+    // registered grid is prefilled without editing this handler.
+    const env: Record<string, { user: string; key: string; cloudServer?: string }> = {};
     for (const s of CLOUD_SPECS) {
-      const [userVar, keyVar] = s.credentialEnv;
-      env[s.provider] = { user: process.env[userVar] ?? '', key: process.env[keyVar] ?? '' };
+      const [userVar, keyVar] =
+        s.credentialEnv.length === 2 ? s.credentialEnv : [undefined, s.credentialEnv[0]];
+      env[s.provider] = {
+        user: userVar ? (process.env[userVar] ?? '') : '',
+        key: process.env[keyVar] ?? '',
+        ...(s.tenantUrlEnvVar ? { cloudServer: process.env[s.tenantUrlEnvVar] ?? '' } : {}),
+      };
     }
     json(res, 200, env);
     return;
@@ -445,9 +459,10 @@ async function handle(
       provider: CloudProviderName;
       user: string;
       key: string;
+      cloudServer?: string;
     }>(req);
     try {
-      const devices = await fetchCloudDevices(body.provider, body.user, body.key);
+      const devices = await fetchCloudDevices(body.provider, body.user, body.key, body.cloudServer);
       json(res, 200, { ok: true, devices });
     } catch (err) {
       json(res, 400, { ok: false, error: (err as Error).message });
@@ -1561,26 +1576,43 @@ async function exportScriptToProject(
 }
 
 // ─── Cloud device-catalog fetching ─────────────────────────────
-// `CloudDevice` now lives in `../types/index.js` (a leaf module the cloud specs
+// `CloudDevice` lives in `../types/index.js` (a leaf module the cloud specs
 // can also reach); re-export it here so existing importers of this path keep
-// working.
+// working. Per-grid parsers (`parseBrowserStackDevices`, `parseLambdatestDevices`,
+// `parseDigitalAiDevices`) live alongside each grid's spec in `src/providers/`.
 export type { CloudDevice };
 
-// The device catalog is now spec-driven: each grid's `CloudSpec.catalog`
-// declares the list URL and a PURE parser (see src/providers/{browserstack,
-// lambdatest}/index.ts). Here we own only the grid-agnostic HTTP: auth, status
+// The device catalog is spec-driven: each grid's `CloudSpec.catalog` declares
+// the list URL and a PURE parser (see src/providers/{browserstack,lambdatest,
+// digitalai}/index.ts). Here we own only the grid-agnostic HTTP: auth, status
 // check, and the "200 but nothing parsed" diagnostic.
 async function fetchCloudDevices(
   provider: CloudProviderName,
   user: string,
   key: string,
+  cloudServer?: string,
 ): Promise<CloudDevice[]> {
-  if (!user || !key) {
-    throw new Error(`${provider} username + access key are required.`);
-  }
   const spec = getSpec(provider);
+  if (spec.credentialEnv.length === 2) {
+    if (!user || !key) {
+      throw new Error(`${provider} username + access key are required.`);
+    }
+  } else if (!key) {
+    throw new Error(`${provider} requires an access key.`);
+  }
+  if (spec.tenantUrlEnvVar && !cloudServer) {
+    throw new Error(`${provider} requires a cloud server URL.`);
+  }
+  // Tenant-hosted grids (Digital.ai) resolve their list URL from an env var
+  // rather than a fixed hostname — set it for the duration of this call so
+  // `spec.catalog.listUrl()` (a synchronous function of `process.env`) sees it.
+  if (spec.tenantUrlEnvVar) process.env[spec.tenantUrlEnvVar] = cloudServer;
+  const [userVar, keyVar] =
+    spec.credentialEnv.length === 2 ? spec.credentialEnv : [undefined, spec.credentialEnv[0]];
+  const authEnv: Record<string, string | undefined> = { [keyVar]: key };
+  if (userVar) authEnv[userVar] = user;
   const r = await fetch(spec.catalog.listUrl(), {
-    headers: { Authorization: basicAuth(user, key) },
+    headers: { Authorization: cloudAuthHeader(spec, authEnv) },
   });
   if (!r.ok) {
     throw new Error(`${spec.display.label} device list returned ${r.status} — check credentials.`);

@@ -4,11 +4,13 @@ import { EmulatorProvider } from './emulator/index.js';
 import { LocalDeviceProvider } from './local/index.js';
 import { BrowserStackDeviceProvider, browserStackSpec } from './browserstack/index.js';
 import { LambdaTestDeviceProvider, lambdaTestSpec } from './lambdatest/index.js';
+import { DigitalAiDeviceProvider, digitalAiSpec } from './digitalai/index.js';
 
 export { EmulatorProvider } from './emulator/index.js';
 export { LocalDeviceProvider } from './local/index.js';
 export { BrowserStackDeviceProvider } from './browserstack/index.js';
 export { LambdaTestDeviceProvider } from './lambdatest/index.js';
+export { DigitalAiDeviceProvider } from './digitalai/index.js';
 export type { DeviceHandle } from '../types/index.js';
 export type { CloudSpec } from './cloud.js';
 
@@ -28,13 +30,14 @@ const REGISTRY: Record<string, ProviderConstructor> = {
   'local-device': LocalDeviceProvider,
   browserstack: BrowserStackDeviceProvider,
   lambdatest: LambdaTestDeviceProvider,
+  digitalai: DigitalAiDeviceProvider,
 };
 
 // The single source of truth for cloud grids: one `CloudSpec` per grid. Adding
 // a grid is one entry here (plus its `REGISTRY` class above) — everything the
 // inspector/server/capabilities layers need (credential env vars, device
 // catalog, permission-cap dialect, UI display metadata) derives from these.
-export const CLOUD_SPECS = [browserStackSpec, lambdaTestSpec] as const;
+export const CLOUD_SPECS = [browserStackSpec, lambdaTestSpec, digitalAiSpec] as const;
 
 /**
  * Semantic alias for a cloud grid's `device.provider` value, derived from the
