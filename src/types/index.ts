@@ -370,13 +370,7 @@ export interface TaqwrightConfig extends TestRunnerOptions {
   fullyParallel?: boolean;
   forbidOnly?: boolean;
   reporter?:
-    | 'list'
-    | 'html'
-    | 'json'
-    | 'junit'
-    | 'line'
-    | 'dot'
-    | Array<[string] | [string, unknown]>;
+    'list' | 'html' | 'json' | 'junit' | 'line' | 'dot' | Array<[string] | [string, unknown]>;
   globalSetup?: string | string[];
   globalTeardown?: string | string[];
 }
