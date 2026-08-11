@@ -5,8 +5,8 @@
 </h1>
 
 <p align="center">
-  <a href="https://github.com/taqelah/taqwright/tags"><img src="https://img.shields.io/badge/version-0.1.0--beta.3-blue" alt="version" /></a>
-  <a href="https://www.npmjs.com/package/@taqwright/taqwright"><img src="https://img.shields.io/npm/v/@taqwright/taqwright/beta?label=npm%20beta&color=orange" alt="npm beta" /></a>
+  <a href="https://github.com/taqelah/taqwright/tags"><img src="https://img.shields.io/badge/version-1.0.0-blue" alt="version" /></a>
+  <a href="https://www.npmjs.com/package/@taqwright/taqwright"><img src="https://img.shields.io/npm/v/@taqwright/taqwright?label=npm&color=brightgreen" alt="npm" /></a>
   <a href="https://www.npmjs.com/package/@taqwright/taqwright"><img src="https://img.shields.io/npm/dw/@taqwright/taqwright" alt="npm downloads" /></a>
   <a href="https://github.com/taqelah/taqwright/actions/workflows/ci.yml"><img src="https://github.com/taqelah/taqwright/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="https://codecov.io/gh/taqelah/taqwright"><img src="https://codecov.io/gh/taqelah/taqwright/branch/main/graph/badge.svg" alt="coverage" /></a>
@@ -16,7 +16,7 @@
 
 E2E mobile UI testing on the Playwright runner, with a flat locator API on top of Appium 3.
 
-> 🧪 **Public beta.** The API is stabilizing toward 1.0 and may still change between minor versions. Install the beta with `npm i -D @taqwright/taqwright@beta`. Bug reports and feedback are very welcome — [open an issue](https://github.com/taqelah/taqwright/issues).
+> ✅ **1.0 is here.** The API is stable and follows semver — breaking changes land only in a new major. Install it with `npm i -D @taqwright/taqwright`. Bug reports and feedback are very welcome — [open an issue](https://github.com/taqelah/taqwright/issues).
 
 ```ts
 import { test, expect } from '@taqwright/taqwright';
@@ -88,17 +88,15 @@ If you've used Playwright, you already know Taqwright.
 
 ## Install
 
-taqwright is in public beta on npm — install the `beta` channel:
-
 ```bash
-npm install --save-dev @taqwright/taqwright@beta
+npm install --save-dev @taqwright/taqwright
 ```
 
 In `package.json` it looks like:
 
 ```json
 "devDependencies": {
-  "@taqwright/taqwright": "^0.1.0-beta.0"
+  "@taqwright/taqwright": "^1.0.0"
 }
 ```
 
