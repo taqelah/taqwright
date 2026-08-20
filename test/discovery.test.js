@@ -7,6 +7,7 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { toAssignableSlots, selectDevicePool, resolvedPoolEnvKey } from '../dist/discovery.js';
+import { projectsNeedingSetup } from '../dist/discovery-setup.js';
 import { Platform } from '../dist/types/index.js';
 
 // ── DeviceListing literal builders ──────────────────────────────────
@@ -176,5 +177,98 @@ describe('resolvedPoolEnvKey', () => {
     assert.equal(resolvedPoolEnvKey('android'), 'TAQWRIGHT_RESOLVED_POOL__android');
     assert.equal(resolvedPoolEnvKey('my project!'), 'TAQWRIGHT_RESOLVED_POOL__my_project_');
     assert.equal(resolvedPoolEnvKey(undefined), 'TAQWRIGHT_RESOLVED_POOL__');
+  });
+});
+
+// ── projectsNeedingSetup ────────────────────────────────────────────
+// Which projects the globalSetup hook brings devices up for. The hook used to
+// iterate EVERY project in the config file, ignoring `--project`, so selecting a
+// cloud project still pre-booted local AVDs and then threw on `autoDiscover found
+// 0 devices` — making a cloud run impossible on any CI machine without an Android
+// SDK. `autoStartTargets` (auto-appium.ts) already carried the filter guard; this
+// is the same guard for the sibling concern.
+describe('projectsNeedingSetup', () => {
+  const appium = { autoStart: true, host: 'localhost', port: 4723, path: '/' };
+  // Shaped like taqwright-demo: a static Android pool, an autoDiscover project,
+  // a plain single-device project, and a cloud project.
+  const cfg = {
+    projects: [
+      {
+        name: 'android-single',
+        use: { platform: Platform.ANDROID, device: { provider: 'emulator' }, appium },
+      },
+      {
+        name: 'android-pool-2',
+        use: {
+          platform: Platform.ANDROID,
+          device: {
+            provider: 'emulator',
+            pool: [
+              { udid: 'a', name: 'AVD_A' },
+              { udid: 'b', name: 'AVD_B' },
+            ],
+          },
+          appium,
+        },
+      },
+      {
+        name: 'android-auto-1',
+        use: {
+          platform: Platform.ANDROID,
+          device: { provider: 'emulator', autoDiscover: true },
+          appium,
+        },
+      },
+      {
+        name: 'lambdatest-android',
+        use: { platform: Platform.ANDROID, device: { provider: 'lambdatest', name: 'Pixel 8' } },
+      },
+    ],
+  };
+  const names = (filter) => projectsNeedingSetup(cfg, filter).map((p) => p.name);
+
+  // No filter = today's behaviour, unchanged. A single-device project needs no
+  // bring-up here (the CLI pre-starts its Appium instead), and a cloud project
+  // has no local device at all.
+  test('without a filter, selects the pool and autoDiscover projects only', () => {
+    assert.deepEqual(names(), ['android-pool-2', 'android-auto-1']);
+  });
+
+  // The regression. Selecting the cloud project must bring up NOTHING — this is
+  // the CI case, where there is no Android SDK and autoDiscover would throw.
+  test('selecting a cloud project brings up nothing', () => {
+    assert.deepEqual(names(['lambdatest-android']), []);
+  });
+
+  test('honors projectFilter for local projects', () => {
+    assert.deepEqual(names(['android-pool-2']), ['android-pool-2']);
+    assert.deepEqual(names(['android-auto-1']), ['android-auto-1']);
+    // Selected, but still needs no bring-up — the filter narrows, it never widens.
+    assert.deepEqual(names(['android-single']), []);
+  });
+
+  test('handles several selected projects, and unknown names', () => {
+    assert.deepEqual(names(['android-pool-2', 'android-auto-1']), [
+      'android-pool-2',
+      'android-auto-1',
+    ]);
+    assert.deepEqual(names(['no-such-project']), []);
+  });
+
+  // autoStartDevice: false opts a pool project out of pre-booting entirely.
+  test('respects autoStartDevice: false on a pool project', () => {
+    const off = {
+      projects: [
+        {
+          name: 'pool-no-autostart',
+          use: {
+            platform: Platform.ANDROID,
+            device: { provider: 'emulator', pool: [{ udid: 'a', name: 'AVD_A' }] },
+            appium: { ...appium, autoStartDevice: false },
+          },
+        },
+      ],
+    };
+    assert.deepEqual(projectsNeedingSetup(off), []);
   });
 });

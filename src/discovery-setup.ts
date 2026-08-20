@@ -1,4 +1,5 @@
 import { Platform } from './types/index.js';
+import type { TaqwrightConfig, TaqwrightProjectConfig } from './types/index.js';
 import { loadTaqwrightConfig, effectiveWorkers } from './config.js';
 import {
   discoverAssignableDevices,
@@ -26,16 +27,32 @@ import { logger } from './logger.js';
  *  4. Freeze the resolved auto-discover pool into an env var the worker fixture
  *     reads. (Static pools need no freeze — the fixture reads `device.pool`.)
  */
-export default async function autoDiscoverGlobalSetup(): Promise<void> {
-  const config = await loadTaqwrightConfig();
-  if (!config) return;
+/**
+ * Which projects this hook actually brings devices up for: the ones selected by
+ * `--project` (all of them when nothing was selected) that additionally need
+ * auto-discovery or a static Android pool pre-booted.
+ *
+ * The filter is the point. This used to iterate EVERY project in the config file,
+ * so `--project lambdatest-android` still pre-booted local AVDs and then threw
+ * `autoDiscover found 0 devices` — making a cloud run impossible on any CI machine
+ * without an Android SDK, which is exactly where cloud runs belong. `autoStartTargets`
+ * in auto-appium.ts already guards the sibling concern (where to spawn Appium) the
+ * same way; this hook simply never got it.
+ *
+ * Pure and exported so it can be unit-tested: the default export below takes no
+ * arguments and loads its own config, because Playwright registers it by file path.
+ */
+export function projectsNeedingSetup(
+  config: TaqwrightConfig,
+  projectFilter: string[] = [],
+): TaqwrightProjectConfig[] {
+  const filterSet = new Set(projectFilter);
+  return config.projects.filter((project) => {
+    if (filterSet.size > 0 && !filterSet.has(project.name ?? '')) return false;
 
-  for (const project of config.projects) {
     const device = project.use.device as {
       provider?: string;
       autoDiscover?: boolean;
-      osVersion?: string;
-      name?: string | RegExp;
       pool?: Array<{ udid: string; name?: string; osVersion?: string }>;
     };
     const autoStartDevice = project.use.appium?.autoStartDevice !== false;
@@ -50,7 +67,42 @@ export default async function autoDiscoverGlobalSetup(): Promise<void> {
       device.pool.length > 0 &&
       autoStartDevice;
 
-    if (!isAutoDiscover && !isStaticAndroidPool) continue;
+    return isAutoDiscover || isStaticAndroidPool;
+  });
+}
+
+/** The `--project` selection, published by the CLI before it spawns Playwright. */
+function selectedProjects(): string[] {
+  const raw = process.env.TAQWRIGHT_PROJECT_FILTER;
+  if (!raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
+}
+
+export default async function autoDiscoverGlobalSetup(): Promise<void> {
+  const config = await loadTaqwrightConfig();
+  if (!config) return;
+
+  for (const project of projectsNeedingSetup(config, selectedProjects())) {
+    const device = project.use.device as {
+      provider?: string;
+      autoDiscover?: boolean;
+      osVersion?: string;
+      name?: string | RegExp;
+      pool?: Array<{ udid: string; name?: string; osVersion?: string }>;
+    };
+    const autoStartDevice = project.use.appium?.autoStartDevice !== false;
+    const isStaticAndroidPool =
+      !device.autoDiscover &&
+      device.provider === 'emulator' &&
+      project.use.platform === Platform.ANDROID &&
+      Array.isArray(device.pool) &&
+      device.pool.length > 0 &&
+      autoStartDevice;
 
     // Static Android pool: pre-boot each named AVD. The worker fixture reads
     // `device.pool` directly and selects the device via `appium:avd`, so there's
