@@ -1,6 +1,6 @@
 {
   "name": "@taqwright/taqwright",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "E2E mobile testing on the Playwright runner",
   "license": "Apache-2.0",
   "homepage": "https://www.taqwright.dev",
