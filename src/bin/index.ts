@@ -168,6 +168,16 @@ program
       args.push('--workers', String(workers));
     }
 
+    // Playwright registers our discovery globalSetup by FILE PATH and invokes it with no
+    // arguments inside the spawned child, so `--project` cannot reach it any other way.
+    // Without this it pre-boots AVDs and auto-discovers devices for EVERY project in the
+    // config — which makes a cloud project unrunnable on a CI machine with no Android SDK,
+    // the one place cloud projects are most wanted. `runPlaywright` copies process.env into
+    // the child, so setting it here is enough.
+    if (projectFilter.length) {
+      process.env.TAQWRIGHT_PROJECT_FILTER = JSON.stringify(projectFilter);
+    }
+
     const appiumProcs = await maybeAutoStartAppium(configPath, projectFilter);
     const code = await runPlaywright(args);
     for (const proc of appiumProcs) {

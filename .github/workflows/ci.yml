@@ -67,6 +67,148 @@ jobs:
       # needed). Free dependency-vuln scanning that works on private repos.
       - run: npm audit --audit-level=high
 
+  # The only gate that runs taqwright against a REAL device. Everything above is
+  # mocked, which is how a bug like "globalSetup ignores --project" reached a release:
+  # 553 unit tests passed while `taqwright test --project <cloud>` could not start at
+  # all on a machine without an Android SDK.
+  #
+  # Installs THIS BRANCH as a packed tarball rather than @taqwright/taqwright@latest,
+  # so what is exercised is the publishable artifact — files list, bin entry, compiled
+  # dist — not the working tree. scaffold.yml's `scaffold-and-run` job covers the
+  # opposite case (the already-published package) and stays manual.
+  e2e-emulator:
+    name: E2E — demo login on an emulator (this branch)
+    runs-on: ubuntu-latest
+    # Heavy: taqwright pulls a managed JDK + SDK + system image (~2 GB) and the
+    # emulator cold-boots inside the first test.
+    timeout-minutes: 45
+    # taqwright never sets ANDROID_AVD_HOME, so avdmanager (create) and Appium's
+    # appium-adb (run) can resolve the default AVD dir differently on the runner.
+    # Pinning it once at job level flows into BOTH, so the AVD is created where
+    # Appium then looks for it.
+    env:
+      ANDROID_AVD_HOME: ${{ github.workspace }}/.android-avd
+
+    steps:
+      # Hardware acceleration for the emulator (ubuntu-latest runners expose KVM).
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      # Pack the branch and install the TARBALL globally, so `taqwright init` below is
+      # this branch's CLI. The `prepare` hook builds dist/ (it fires on both `npm ci`
+      # and `npm pack`), and `files` is ["dist", …], so the tarball is the real
+      # dist-only shipped surface — a missing export or a stale build fails here
+      # rather than after publishing. The version is in the filename, so glob it.
+      - name: Pack this branch
+        id: pack
+        run: |
+          set -euo pipefail
+          npm ci
+          npm pack
+          TGZ="$(ls -1 taqwright-taqwright-*.tgz | head -1)"
+          test -n "$TGZ" || { echo "::error::npm pack produced no tarball"; exit 1; }
+          echo "tgz=$PWD/$TGZ" >> "$GITHUB_OUTPUT"
+          npm install -g "$PWD/$TGZ"
+          echo "taqwright CLI: $(taqwright --version)"
+
+      # taqwright provisions everything: --install-toolchain pulls a managed JDK + SDK +
+      # Appium + uiautomator2, --with-avd creates AVD `taqwright_api34`, --demo-app
+      # downloads DemoApp-v1.0.0.apk and writes the login specs.
+      - name: Scaffold + provision toolchain & AVD
+        run: |
+          mkdir -p "$ANDROID_AVD_HOME"
+          taqwright init proj --platform android --demo-app \
+            --install-toolchain --with-avd --no-install -y
+
+      # Fail fast and legibly if the AVD landed somewhere Appium won't look, rather
+      # than surfacing later as a confusing "no emulators" error.
+      - name: Verify the AVD was created
+        run: |
+          test -d "$ANDROID_AVD_HOME/taqwright_api34.avd" \
+            || { echo "::error::taqwright_api34 was not created under $ANDROID_AVD_HOME"; ls -la "$ANDROID_AVD_HOME" || true; exit 1; }
+
+      # The tarball again, not @latest — the scaffold's own devDependency line would
+      # otherwise pull the published package and quietly test the wrong code.
+      - name: Install this branch into the scaffolded project
+        working-directory: proj
+        run: npm install --save-dev "${{ steps.pack.outputs.tgz }}" typescript @types/node
+
+      # Keep taqwright-managed boot (string device.name -> appium:avd) but inject
+      # headless emulator flags (taqwright's launcher isn't headless-safe, so boot goes
+      # through Appium via avdArgs) and timeouts sized for a cold software-GPU device.
+      - name: Write CI config
+        run: |
+          cat > proj/taqwright.config.ts <<'EOF'
+          import { defineConfig, Platform } from '@taqwright/taqwright';
+
+          export default defineConfig({
+            testDir: './tests',
+            timeout: 300000,
+            // First boot of the headless software-GPU emulator is flaky: the
+            // UiAutomator2 instrumentation can crash on the cold device, aborting
+            // session creation. Retries re-run on the now-warm emulator.
+            retries: 2,
+            projects: [
+              {
+                name: 'android',
+                use: {
+                  platform: Platform.ANDROID,
+                  device: { provider: 'emulator', name: 'taqwright_api34' },
+                  resetBetweenTests: true,
+                  buildPath: './app/DemoApp-v1.0.0.apk',
+                  appBundleId: 'com.taqelah.demo_app',
+                  appium: {
+                    autoStart: true,
+                    autoStartDevice: true,
+                    host: 'localhost',
+                    port: 4723,
+                  },
+                  capabilities: {
+                    // Headless software GPU + more RAM. Don't bump -cores past the
+                    // 2-vCPU runner: over-subscribing makes the cold-boot
+                    // UiAutomator2 instrumentation flakier, not less.
+                    'appium:avdArgs':
+                      '-no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -memory 4096',
+                    // Software-rendered emulator: APK installs are slow, so raise the
+                    // adb / UiAutomator2-server timeouts above their 20s/30s defaults
+                    // so createSession doesn't abort mid-install.
+                    'appium:adbExecTimeout': 120000,
+                    'appium:uiautomator2ServerInstallTimeout': 120000,
+                    'appium:uiautomator2ServerLaunchTimeout': 120000,
+                    'appium:androidInstallTimeout': 180000,
+                  },
+                },
+              },
+            ],
+          });
+          EOF
+
+      # The scaffolded demo specs: a successful login asserting the home screen, and a
+      # rejected login asserting the error. Runs through the same --project path the
+      # cloud flow uses, so a globalSetup regression fails here.
+      - name: Run the demo login specs
+        working-directory: proj
+        run: npx taqwright test --project android
+
+      - name: Upload report on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-emulator-report
+          path: proj/playwright-report/
+          if-no-files-found: ignore
+          retention-days: 7
+
   coverage:
     name: Coverage
     runs-on: ubuntu-latest
