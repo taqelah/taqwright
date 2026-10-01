@@ -303,6 +303,12 @@ export function buildCapabilities(use: TaqwrightUseOptions, projectName: string,
     'appium:automationName': isIOS ? 'XCUITest' : 'UiAutomator2',
     // XCUITest-only — UiAutomator2 rejects unknown settings.
     ...(isIOS ? { 'appium:settings[snapshotMaxDepth]': 62 } : {}),
+    // pCloudy rejects a session that names `pCloudy_ApplicationName` without
+    // the app's id ("Either appPackage or bundleId is required…") — it does
+    // not read it back from the uploaded build.
+    ...(applicationName && use.appBundleId
+      ? { [isIOS ? 'appium:bundleId' : 'appium:appPackage']: use.appBundleId }
+      : {}),
     [VENDOR]: {
       pCloudy_Username: process.env[USERNAME_ENV],
       pCloudy_ApiKey: process.env[API_KEY_ENV],
@@ -332,7 +338,19 @@ export const pcloudySpec: CloudSpec = {
   // required.
   tenantUrlEnvVar: CLOUD_URL_ENV,
   tenantUrlDefault: DEFAULT_CLOUD_URL,
+  // Accounts live on ONE regional cloud; the wrong one answers a session with
+  // "plan doesnot support… or expired" / "App not available" rather than an
+  // auth error, so make the region an explicit choice.
+  tenantUrlPresets: [
+    { label: 'Global', url: DEFAULT_CLOUD_URL },
+    { label: 'Singapore', url: 'https://sg.pcloudy.com' },
+    { label: 'United States', url: 'https://us.pcloudy.com' },
+  ],
   prebuiltScheme: PREBUILT_SCHEME,
+  // The session needs the app's package / bundle id alongside the build (see
+  // `buildCapabilities`), and pCloudy has no API to read it back — fail at
+  // construction rather than after a slow upload.
+  requireBundleId: true,
   appUrlEnvVar: (projectName) => `PCLOUDY_APP_REF_${projectName.toUpperCase()}`,
   upload: {
     endpoint: () => `${cloudOrigin()}/api/upload_file`,

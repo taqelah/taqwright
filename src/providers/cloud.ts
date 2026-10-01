@@ -113,6 +113,13 @@ export interface CloudSpec {
    */
   readonly tenantUrlDefault?: string;
   /**
+   * Known regional clouds for `tenantUrlEnvVar` (pCloudy: Global / Singapore /
+   * US). The inspector renders them as a Location picker — with a "Custom URL"
+   * escape hatch for enterprise tenants — instead of a bare URL field. Purely
+   * presentational: the chosen URL travels exactly like a typed one.
+   */
+  readonly tenantUrlPresets?: readonly { label: string; url: string }[];
+  /**
    * The permission-related caps the inspector turns OFF during codegen so the
    * user can see and record permission/alert prompts. Expressed in THIS grid's
    * dialect (BrowserStack uses `appium:`-prefixed keys; LambdaTest uses bare
@@ -320,6 +327,9 @@ export class CloudProvider implements DeviceProvider {
       : (data as { app_url?: string }).app_url;
     if (!appRef) {
       logger.error('Build upload did not return an app reference:', data);
+    } else {
+      // Surfaced so it can be reused as `buildPath` to skip re-uploading.
+      logger.log(`Uploaded: ${appRef}`);
     }
     return appRef;
   }

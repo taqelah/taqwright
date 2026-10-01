@@ -814,6 +814,42 @@ describe('pCloudy buildCapabilities (Appium-2 / W3C shape)', () => {
   test('no app ref → pCloudy_ApplicationName omitted (session attaches to the device)', () => {
     const caps = buildPcloudyCaps(androidUse, 'proj', '');
     assert.ok(!('pCloudy_ApplicationName' in caps['pCloudy:options']));
+    assert.ok(!('appium:appPackage' in caps));
+  });
+
+  // pCloudy rejects pCloudy_ApplicationName without the app id: "Either
+  // appPackage or bundleId is required when pCloudy_ApplicationName is
+  // provided without appSource".
+  test('android: app ref carries appium:appPackage from appBundleId', () => {
+    const caps = buildPcloudyCaps(androidUse, 'proj', 'pcloudy:MyApp.apk');
+    assert.equal(caps['appium:appPackage'], 'com.acme.app');
+    assert.ok(!('appium:bundleId' in caps));
+  });
+
+  test('iOS: app ref carries appium:bundleId from appBundleId', () => {
+    const caps = buildPcloudyCaps(
+      {
+        platform: 'ios',
+        appBundleId: 'com.acme.MyApp',
+        device: { provider: 'pcloudy', name: 'Apple iPhone14', osVersion: '16.4.1' },
+      },
+      'proj',
+      'pcloudy:MyApp.ipa',
+    );
+    assert.equal(caps['appium:bundleId'], 'com.acme.MyApp');
+    assert.ok(!('appium:appPackage' in caps));
+  });
+
+  test('the provider requires appBundleId up front', () => {
+    assert.equal(pcloudySpec.requireBundleId, true);
+  });
+
+  test('regional presets include the default cloud and only https origins', () => {
+    const urls = pcloudySpec.tenantUrlPresets.map((p) => p.url);
+    assert.ok(urls.includes(pcloudySpec.tenantUrlDefault));
+    assert.ok(urls.includes('https://sg.pcloudy.com'));
+    for (const u of urls) assert.match(u, /^https:\/\/[a-z]+\.pcloudy\.com$/);
+    assert.equal(new Set(urls).size, urls.length);
   });
 
   test('iOS: XCUITest + snapshotMaxDepth, platformName iOS', () => {

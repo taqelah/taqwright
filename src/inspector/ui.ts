@@ -1171,6 +1171,10 @@ export const INSPECTOR_HTML = `<!doctype html>
             <span class="grow"></span>
             <span id="cloud-creds-pill" class="pill down"><span class="led"></span><span id="cloud-creds-pill-label">awaiting…</span></span>
           </div>
+          <div class="field" id="cloud-region-field" style="display:none">
+            <label for="cloud-region">Location</label>
+            <select id="cloud-region"></select>
+          </div>
           <div class="field" id="cloud-server-field" style="display:none">
             <label for="cloud-server">Cloud server URL</label>
             <input id="cloud-server" placeholder="https://yourtenant.experitest.com" autocomplete="off" />
@@ -1235,6 +1239,10 @@ export const INSPECTOR_HTML = `<!doctype html>
           <div class="field">
             <label for="cap-device">Device</label>
             <input id="cap-device" placeholder="emulator-5554, Pixel 6, iPhone 15…" />
+          </div>
+          <div class="field" id="cap-fullname-field" style="display:none">
+            <label for="cap-fullname">Device ID</label>
+            <input id="cap-fullname" readonly title="Exact cloud device id — copy into device.deviceFullName in taqwright.config.ts" />
           </div>
           <div class="field">
             <label for="cap-version">OS version</label>
@@ -4228,6 +4236,7 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
       $(id).addEventListener('input', refreshCloudCredsPill);
       $(id).addEventListener('change', refreshCloudCredsPill);
     }
+    $('cloud-region').addEventListener('change', onCloudRegionChange);
     for (const id of ['appium-host', 'appium-port', 'appium-path']) {
       $(id).addEventListener('change', () => { refreshAppiumPill(); updateConnectSummary(); });
       $(id).addEventListener('input', updateConnectSummary);
@@ -4456,7 +4465,10 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
       const m = cloudProvidersMeta[mode];
       const serverField = document.getElementById('cloud-server-field');
       const userField = document.getElementById('cloud-user-field');
-      if (serverField) serverField.style.display = m && m.needsCloudServer ? '' : 'none';
+      // Grids with known regional clouds (pCloudy) get a Location picker; the
+      // URL field then only shows for its "Custom URL" option.
+      const hasPresets = renderCloudRegion(mode);
+      if (serverField) serverField.style.display = m && m.needsCloudServer && !hasPresets ? '' : 'none';
       if (userField) userField.style.display = cloudNeedsUser() ? '' : 'none';
       // Grids with a default cloud (pCloudy) show the field but don't demand
       // it — advertise the default as the placeholder.
@@ -4503,7 +4515,7 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
         const scheme = (m && m.prebuiltScheme) || '';
         appInput.placeholder = m && m.appOptional
           ? scheme + '<bundleId> (or a local .apk / .ipa to upload; optional — attaches to the device as-is)'
-          : scheme + '… (uploaded via ' + cloudLabel(connectionMode) + ' app-upload)';
+          : 'local .apk / .ipa (uploaded on connect) or ' + scheme + '… if already on ' + cloudLabel(connectionMode);
       } else {
         appInput.placeholder = 'optional · path to .apk / .ipa / .app';
       }
@@ -4514,9 +4526,8 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
       bundleInput.placeholder = (bundleRequired() ? 'required' : 'optional') + ' · com.example.app';
     }
     updateBundleLabel();
-    // Browse button is meaningless for cloud — no native picker uploads to cloud yet.
-    const browseBtn = document.getElementById('btn-app-browse');
-    if (browseBtn) browseBtn.style.display = cloud ? 'none' : '';
+    // Browse stays visible for cloud too: the picked local path is uploaded to
+    // the grid on connect (the provider's globalSetup).
     // UDID is local-only.
     const udidRow = document.getElementById('cap-udid');
     if (udidRow) {
@@ -4542,6 +4553,63 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
   // user toggle between cloud grids without losing the creds for any one
   // of them.
   const cloudCredsByProvider = { browserstack: null, lambdatest: null, digitalai: null, pcloudy: null };
+
+  // Build the Location picker from the grid's regional presets. Returns false
+  // (and hides the picker) for grids without presets.
+  function renderCloudRegion(mode) {
+    const m = cloudProvidersMeta[mode];
+    const presets = (m && m.cloudServerPresets) || [];
+    const field = $('cloud-region-field');
+    if (!presets.length) {
+      field.style.display = 'none';
+      return false;
+    }
+    $('cloud-region').innerHTML =
+      presets
+        .map((p) => '<option value="' + escapeHtml(p.url) + '">' + escapeHtml(p.label) +
+          ' · ' + escapeHtml(p.url.replace('https://', '')) + '</option>')
+        .join('') +
+      '<option value="__custom">Custom URL…</option>';
+    field.style.display = '';
+    return true;
+  }
+
+  // Point the Location picker at whatever URL the server field holds: a preset
+  // when it matches one (or the grid default when empty), else Custom with the
+  // URL field revealed.
+  function syncCloudRegionFromServer() {
+    const m = cloudProvidersMeta[connectionMode];
+    const presets = (m && m.cloudServerPresets) || [];
+    if (!presets.length) return;
+    const serverEl = $('cloud-server');
+    const srv = (serverEl.value || '').trim();
+    const match = srv
+      ? presets.find((p) => p.url === srv)
+      : presets.find((p) => p.url === m.cloudServerDefault) || presets[0];
+    if (match) {
+      $('cloud-region').value = match.url;
+      serverEl.value = match.url;
+      $('cloud-server-field').style.display = 'none';
+    } else {
+      $('cloud-region').value = '__custom';
+      $('cloud-server-field').style.display = '';
+    }
+  }
+
+  function onCloudRegionChange() {
+    const v = $('cloud-region').value;
+    const serverEl = $('cloud-server');
+    if (v === '__custom') {
+      serverEl.value = '';
+      $('cloud-server-field').style.display = '';
+      serverEl.focus();
+    } else {
+      serverEl.value = v;
+      $('cloud-server-field').style.display = 'none';
+    }
+    snapshotCloudCreds();
+    refreshCloudCredsPill();
+  }
 
   // Save the currently-displayed cloud creds into the cache for the
   // current cloud mode (no-op when local).
@@ -4585,6 +4653,7 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
     if (userEl) userEl.value = user;
     if (keyEl) keyEl.value = key;
     if (serverEl) serverEl.value = cloudServer;
+    syncCloudRegionFromServer();
     const hint = $('cloud-creds-hint');
     if (hint) {
       const meta = cloudProvidersMeta[mode];
@@ -4888,6 +4957,11 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
   function updateConnectSummary() {
     const summary = $('connect-summary');
     const nextBtn = $('btn-step-next');
+    // Mirror the picked cloud device's composite id into step 3 (read-only,
+    // copyable) — shown only for grids that select by one (pCloudy).
+    const fullName = (selectedCloudDevice && selectedCloudDevice.deviceFullName) || '';
+    $('cap-fullname').value = fullName;
+    $('cap-fullname-field').style.display = fullName ? '' : 'none';
     if (wizardStep === 1) {
       if (isCloudMode()) {
         const provLabel = cloudLabel(connectionMode);
@@ -5062,7 +5136,10 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
         const android = [];
         const ios = [];
         for (const d of j.devices) {
-          const synthUdid = connectionMode + ':' + d.platform + ':' + d.deviceName + ':' + d.osVersion;
+          // A composite id (pCloudy) tells apart two handsets of the same model
+          // and OS version, which name + version alone would collapse into one tile.
+          const synthUdid = connectionMode + ':' + d.platform + ':' + d.deviceName + ':' + d.osVersion +
+            (d.fullName ? ':' + d.fullName : '');
           // Only connectable (available) devices are selectable tiles; others
           // (In Use / Offline on Digital.ai) render greyed-out and unselectable.
           const available = d.available !== false;
@@ -5250,7 +5327,9 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
       ? (dev.osVersion + (dev.type === 'ios' ? ' · iOS' : ' · Android'))
       : ([dev.osVersion, dev.avdName].filter(Boolean).join(' · ') || '—');
     const meta = unbootable && dev.bootHint ? baseMeta + ' · ' + dev.bootHint : baseMeta;
-    const showUdid = !isCloud && isBooted;
+    // Cloud tiles show the grid's composite device id (pCloudy) — the exact
+    // string device.deviceFullName needs in taqwright.config.ts.
+    const udidText = isCloud ? dev.cloud.fullName : (isBooted ? dev.udid : '');
     let actions = '';
     if (isCloud) {
       // No start/stop on cloud — the device is always available, the
@@ -5283,7 +5362,7 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
             escapeHtml(stateLabel) + '</span></span>' +
         '</div>' +
         '<div class="meta">' + escapeHtml(meta) + '</div>' +
-        (showUdid ? '<div class="udid">' + escapeHtml(dev.udid) + '</div>' : '') +
+        (udidText ? '<div class="udid">' + escapeHtml(udidText) + '</div>' : '') +
         (actions ? '<div class="actions">' + actions + '</div>' : '') +
       '</div>'
     );

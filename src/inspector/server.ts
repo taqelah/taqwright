@@ -435,6 +435,7 @@ async function handle(
         // prefilled with its public cloud.
         cloudServerRequired: !!s.tenantUrlEnvVar && !s.tenantUrlDefault,
         cloudServerDefault: s.tenantUrlDefault ?? '',
+        cloudServerPresets: s.tenantUrlPresets ?? [],
         appOptional: !!s.appOptional,
       })),
     );
