@@ -10,6 +10,7 @@ import {
   BrowserStackDeviceProvider,
   LambdaTestDeviceProvider,
   DigitalAiDeviceProvider,
+  PcloudyDeviceProvider,
 } from '../dist/providers/index.js';
 
 describe('isCloudProvider', () => {
@@ -17,6 +18,7 @@ describe('isCloudProvider', () => {
     assert.equal(isCloudProvider('browserstack'), true);
     assert.equal(isCloudProvider('lambdatest'), true);
     assert.equal(isCloudProvider('digitalai'), true);
+    assert.equal(isCloudProvider('pcloudy'), true);
   });
   test('false for local providers / undefined', () => {
     assert.equal(isCloudProvider('emulator'), false);
@@ -31,6 +33,7 @@ describe('getProviderClass', () => {
     assert.equal(getProviderClass('browserstack'), BrowserStackDeviceProvider);
     assert.equal(getProviderClass('lambdatest'), LambdaTestDeviceProvider);
     assert.equal(getProviderClass('digitalai'), DigitalAiDeviceProvider);
+    assert.equal(getProviderClass('pcloudy'), PcloudyDeviceProvider);
     assert.equal(getProviderClass('emulator'), EmulatorProvider);
     assert.equal(getProviderClass('local-device'), LocalDeviceProvider);
   });

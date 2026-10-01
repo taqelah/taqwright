@@ -23,6 +23,19 @@ describe('validateBuildPath', () => {
     }
   });
 
+  test('accepts every registered grid’s prebuilt scheme, not just bs:// and lt://', () => {
+    // Regression: the scheme list used to be hardcoded, so newer grids failed
+    // the local-file check with a misleading "Build file not found".
+    for (const ref of ['cloud:com.example.app', 'pcloudy:DemoApp-v1.0.0-1786171090.apk']) {
+      assert.doesNotThrow(() => validateBuildPath(ref, '.apk'));
+    }
+  });
+
+  test('a Windows drive letter is still treated as a local path', () => {
+    // Single char before the colon → not a scheme, so the file check applies.
+    assert.throws(() => validateBuildPath('C:\\builds\\app.apk', '.apk'), /Build file not found/);
+  });
+
   test('throws when a local file does not exist', () => {
     assert.throws(() => validateBuildPath('/no/such/app.apk', '.apk'), /Build file not found/);
   });
