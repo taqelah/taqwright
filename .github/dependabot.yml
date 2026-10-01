@@ -19,6 +19,13 @@ updates:
         update-types:
           - minor
           - patch
+    ignore:
+      # TypeScript 7 is the native (Go) compiler. typescript-eslint, which the
+      # lint step depends on, only accepts typescript <6.1, so a 7.x bump fails
+      # npm ci before lint or tests run (see #98). Lift this once
+      # typescript-eslint supports TypeScript 7.
+      - dependency-name: typescript
+        versions: ['>=7.0.0']
 
   # Keep the GitHub Actions (checkout, setup-node, codeql-action, …) current.
   - package-ecosystem: github-actions
