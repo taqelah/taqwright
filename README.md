@@ -74,7 +74,7 @@ or on a cloud device provider such as BrowserStack, LambdaTest, Digital.ai Testi
 
 You need **Node.js 24.x or newer** — that one taqwright cannot install for you.
 
-For **Android**, everything else is handled:
+For **Android**, the recommended setup is one command, which handles everything else:
 
 ```bash
 npx taqwright install --with-avd
@@ -102,9 +102,11 @@ Line Tools) with its license accepted, and at least one **iOS simulator runtime*
 
 ### Manual setup (fallback)
 
-If you'd rather manage the toolchain yourself — you already have an Android SDK, you
-need a specific Appium version, or you're on CI with its own provisioning — taqwright
-uses whatever is on your `PATH` and skips the managed directory entirely:
+The managed install above is the supported, recommended path. These steps are the
+fallback for when you'd rather own the toolchain yourself — you already have an
+Android SDK, you need a specific Appium version, or you're on CI with its own
+provisioning. taqwright uses whatever is on your `PATH` and skips the managed
+directory entirely:
 
 - A booted Android emulator, iOS simulator, or connected device.
 - [Appium 3.x](https://appium.io) (`npm i -g appium@^3`), with the relevant driver
