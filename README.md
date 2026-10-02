@@ -72,12 +72,51 @@ or on a cloud device provider such as BrowserStack, LambdaTest, Digital.ai Testi
 
 ## Requirements
 
-- Node.js **24.x or newer**.
+You need **Node.js 24.x or newer** — that one taqwright cannot install for you.
+
+For **Android**, everything else is handled:
+
+```bash
+npx taqwright install --with-avd
+```
+
+That vendors a complete, self-contained toolchain — Temurin **JDK 21**, the Android
+**cmdline-tools** and **platform-tools** (`adb`), **Appium 3**, the **`uiautomator2`**
+driver, and an emulator — into taqwright's own directory. No `sudo`, no global `npm
+install -g`, and no shell changes: your `JAVA_HOME`, `ANDROID_HOME` and
+`~/.zshrc`/`~/.bashrc` are left untouched, and taqwright points only its own commands
+at what it installed. It downloads roughly 700 MB, plus about 1 GB more for the
+emulator, so give it a few minutes on a first run. Drop `--with-avd` if you'd rather
+test on a physical device. `npx taqwright init` offers the same install as a prompt
+while scaffolding, and `npx taqwright doctor` reports what is and isn't in place
+(it only checks — it never installs anything).
+
+**You do not need to start Appium yourself.** The scaffolded `taqwright.config.ts`
+sets `appium.autoStart: true`, so `npx taqwright test` launches the server on the
+configured port for you.
+
+For **iOS**, the `xcuitest` driver is installed automatically on macOS, but the
+Apple side of the stack cannot be: you need **full Xcode** (not just the Command
+Line Tools) with its license accepted, and at least one **iOS simulator runtime**
+(`xcodebuild -downloadPlatform iOS`). Run `npx taqwright doctor` to confirm.
+
+### Manual setup (fallback)
+
+If you'd rather manage the toolchain yourself — you already have an Android SDK, you
+need a specific Appium version, or you're on CI with its own provisioning — taqwright
+uses whatever is on your `PATH` and skips the managed directory entirely:
+
 - A booted Android emulator, iOS simulator, or connected device.
-- [Appium 3.x](https://appium.io) (`npm i -g appium@^3`) running on `localhost:4723`, with the relevant driver installed:
+- [Appium 3.x](https://appium.io) (`npm i -g appium@^3`), with the relevant driver
+  installed:
   - Android: `appium driver install uiautomator2`
   - iOS: `appium driver install xcuitest`
-- Platform tools on `PATH`: `adb` (Android), `xcrun` (iOS, macOS only), `java` (UiAutomator2).
+- Platform tools on `PATH`: `adb` (Android), `xcrun` (iOS, macOS only), `java`
+  (JDK 17+, for UiAutomator2), with `ANDROID_HOME` and `JAVA_HOME` exported.
+- Set `appium.autoStart: false` in your config if you want to run the server
+  yourself on `localhost:4723`; otherwise taqwright still starts it for you.
+
+Appium 2.x works on a best-effort basis but isn't covered by CI.
 
 ## Install
 
