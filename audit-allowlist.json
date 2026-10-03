@@ -1,0 +1,11 @@
+{
+  "_comment": "Read by scripts/audit-gate.mjs. Each entry suppresses one advisory for one package, only until `expires`. Delete an entry as soon as a patched version exists. Keep entries rare: this is for advisories with no fix, not for postponing a bump.",
+  "advisories": [
+    {
+      "id": "GHSA-86w9-cpqp-85rv",
+      "package": "node-forge",
+      "expires": "2026-11-01",
+      "reason": "node-forge <= 1.4.0, no patched version. The flaw is in RSA PKCS#1 v1.5 signature VERIFICATION (extra nested DigestAlgorithm elements accepted). taqwright uses node-forge only in src/network/ca.ts, to GENERATE a local CA and leaf certificates for network capture (pki.rsa.generateKeyPair, createCertificate, PEM conversion); it never verifies a signature with it, so the vulnerable path is not reached. Expiry is 30 days from when the advisory began failing CI (2 Oct 2026). Remove when node-forge ships a fix; if none by then, replace node-forge in src/network/ca.ts rather than extend."
+    }
+  ]
+}

@@ -2,8 +2,20 @@
 
 ## Supported versions
 
-taqwright is pre-1.0 and ships from `main`. Only the **latest** released version
-receives security fixes; please upgrade before reporting.
+taqwright is 1.x and follows semver. Releases ship from `main`, and security
+fixes land only in a new release on the **latest minor of the current major**.
+There are no maintenance branches, no backports to earlier minors, and no
+support for a previous major once a new one ships.
+
+| Version | Supported                    |
+| ------- | ---------------------------- |
+| 1.1.x   | ✅ security fixes            |
+| 1.0.x   | ❌ upgrade to the latest 1.x |
+| 0.0.x   | ❌ pre-1.0, end of life      |
+
+So in practice: upgrade to the latest `1.x` release and confirm the issue still
+reproduces there before reporting — if it only reproduces on an older version,
+the fix is to upgrade.
 
 ## Reporting a vulnerability
 
