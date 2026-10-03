@@ -63,9 +63,11 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      # Fail only on high/critical advisories (reads package-lock.json; no install
-      # needed). Free dependency-vuln scanning that works on private repos.
-      - run: npm audit --audit-level=high
+      # Fail on high/critical advisories (reads package-lock.json; no install
+      # needed). Same as `npm audit --audit-level=high`, except that an advisory
+      # with no available fix can be excepted in audit-allowlist.json — one
+      # advisory, one package, with a reason and an expiry date. Anything else fails.
+      - run: node scripts/audit-gate.mjs --level high
 
   # The only gate that runs taqwright against a REAL device. Everything above is
   # mocked, which is how a bug like "globalSetup ignores --project" reached a release:
