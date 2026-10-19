@@ -1150,15 +1150,10 @@ const ANDROID_KEYCODES: Partial<Record<HardwareButton, number>> = {
   ENTER: 66,
 };
 
-// UiAutomator2's `id` strategy prefixes a bare value with `<appPackage>:id/`.
-// That suits XML views (`com.app:id/login`), but React Native `testID`,
-// Compose `testTag` (testTagsAsResourceId) and Flutter `Semantics.identifier`
-// all emit an unprefixed resource-id, so the prefixed lookup never matches.
-// Match the name with or without any package prefix instead. Fully-qualified
-// ids keep the `id` strategy, which matches them verbatim. Appium's UiSelector
-// parser does not unescape string literals, so a single backslash reaches the
-// regex as-is; values containing `"` or `\` can't be embedded safely and also
-// keep the `id` strategy.
+// UiAutomator2's `id` strategy prepends `<appPackage>:id/` to bare values, but
+// RN testID / Compose testTag / Flutter Semantics.identifier emit unprefixed
+// resource-ids. Appium's UiSelector parser doesn't unescape, so one backslash
+// reaches the regex; `"` and `\` can't be embedded, hence the `id` fallback.
 function androidIdStrategy(id: string): LocatorStrategy {
   if (id.includes(':id/') || /["\\]/.test(id)) return { using: 'id', value: id };
   const pattern = `^(.+:id/)?${id.replace(/[.*+?^${}()|[\]]/g, '\\$&')}$`;
