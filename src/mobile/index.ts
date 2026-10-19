@@ -165,7 +165,7 @@ export class Mobile {
     if (this.platform === Platform.IOS) {
       return Locator.fromStrategy(this.ctx, { using: 'accessibility id', value: id });
     }
-    return Locator.fromStrategy(this.ctx, { using: 'id', value: id });
+    return Locator.fromStrategy(this.ctx, androidIdStrategy(id));
   }
 
   /** Alias for getById; matches Playwright naming. */
@@ -233,10 +233,8 @@ export class Mobile {
             return this.getByLabel(value);
           case 'text':
             return this.getByText(value);
-          case 'resource-id': {
-            const id = value.includes(':id/') ? value.split(':id/')[1]! : value;
-            return this.getById(id);
-          }
+          case 'resource-id':
+            return this.getById(value);
         }
       }
       if (type && !attr) {
@@ -1151,6 +1149,24 @@ const ANDROID_KEYCODES: Partial<Record<HardwareButton, number>> = {
   POWER: 26,
   ENTER: 66,
 };
+
+// UiAutomator2's `id` strategy prefixes a bare value with `<appPackage>:id/`.
+// That suits XML views (`com.app:id/login`), but React Native `testID`,
+// Compose `testTag` (testTagsAsResourceId) and Flutter `Semantics.identifier`
+// all emit an unprefixed resource-id, so the prefixed lookup never matches.
+// Match the name with or without any package prefix instead. Fully-qualified
+// ids keep the `id` strategy, which matches them verbatim. Appium's UiSelector
+// parser does not unescape string literals, so a single backslash reaches the
+// regex as-is; values containing `"` or `\` can't be embedded safely and also
+// keep the `id` strategy.
+function androidIdStrategy(id: string): LocatorStrategy {
+  if (id.includes(':id/') || /["\\]/.test(id)) return { using: 'id', value: id };
+  const pattern = `^(.+:id/)?${id.replace(/[.*+?^${}()|[\]]/g, '\\$&')}$`;
+  return {
+    using: '-android uiautomator',
+    value: `new UiSelector().resourceIdMatches("${pattern}")`,
+  };
+}
 
 function escapeSingleQuotes(s: string): string {
   return s.replace(/'/g, "\\'");

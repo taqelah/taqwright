@@ -52,7 +52,7 @@ describe('Mobile.getBy* factories', () => {
     });
   });
 
-  test('getById → id (Android) / accessibility id (iOS)', async () => {
+  test('getById → package-agnostic resourceIdMatches (Android) / accessibility id (iOS)', async () => {
     const a = findCapture();
     assert.deepEqual(
       await strategyOf(
@@ -60,7 +60,10 @@ describe('Mobile.getBy* factories', () => {
         (m) => m.getById('foo'),
         a.cap,
       ),
-      { using: 'id', value: 'foo' },
+      {
+        using: '-android uiautomator',
+        value: 'new UiSelector().resourceIdMatches("^(.+:id/)?foo$")',
+      },
     );
     const i = findCapture();
     assert.deepEqual(
@@ -71,6 +74,26 @@ describe('Mobile.getBy* factories', () => {
       ),
       { using: 'accessibility id', value: 'foo' },
     );
+  });
+
+  test('Android getById escapes regex metacharacters in the id', async () => {
+    const { findElements, cap } = findCapture();
+    const { mobile } = makeMobile(Platform.ANDROID, { findElements });
+    assert.deepEqual(await strategyOf(mobile, (m) => m.getById('cart.item(1)'), cap), {
+      using: '-android uiautomator',
+      value: 'new UiSelector().resourceIdMatches("^(.+:id/)?cart\\.item\\(1\\)$")',
+    });
+  });
+
+  test('Android getById keeps the id strategy for fully-qualified or unembeddable ids', async () => {
+    for (const id of ['com.app:id/login', 'android:id/content', 'say"hi', 'back\\slash']) {
+      const { findElements, cap } = findCapture();
+      const { mobile } = makeMobile(Platform.ANDROID, { findElements });
+      assert.deepEqual(await strategyOf(mobile, (m) => m.getById(id), cap), {
+        using: 'id',
+        value: id,
+      });
+    }
   });
 
   test('getByType → class name verbatim', async () => {
@@ -181,7 +204,7 @@ describe('Mobile.getBy* factories — labels, placeholders, roles, xpath, css', 
         (m) => m.getByXpath('//android.widget.EditText[@resource-id="com.app:id/email"]'),
         rid.cap,
       ),
-      { using: 'id', value: 'email' },
+      { using: 'id', value: 'com.app:id/email' },
     );
   });
 
