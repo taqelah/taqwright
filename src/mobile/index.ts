@@ -310,7 +310,8 @@ export class Mobile {
   // ─── App lifecycle ─────────────────────────────────────────────────
 
   async installApp(path: string): Promise<void> {
-    await this.driver.executeScript('mobile: installApp', [{ app: path }]);
+    const arg = this.platform === Platform.IOS ? { app: path } : { appPath: path };
+    await this.driver.executeScript('mobile: installApp', [arg]);
   }
 
   async uninstallApp(bundleId?: string): Promise<void> {

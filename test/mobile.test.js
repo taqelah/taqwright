@@ -243,6 +243,26 @@ describe('Mobile context helpers', () => {
   });
 });
 
+describe('Mobile.installApp', () => {
+  // XCUITest names the path `app`; UiAutomator2 names it `appPath` and rejects
+  // `app` with "appPath must be provided".
+  for (const [platform, expected] of [
+    [Platform.IOS, { app: '/tmp/App.app' }],
+    [Platform.ANDROID, { appPath: '/tmp/App.app' }],
+  ]) {
+    test(`${platform} sends ${Object.keys(expected)[0]}`, async () => {
+      let call = null;
+      const { mobile } = makeMobile(platform, {
+        executeScript: async (cmd, args) => {
+          call = { cmd, args };
+        },
+      });
+      await mobile.installApp('/tmp/App.app');
+      assert.deepEqual(call, { cmd: 'mobile: installApp', args: [expected] });
+    });
+  }
+});
+
 describe('Mobile.swipe — Android native gesture', () => {
   test("default 'up' swipe computes the 40–60% Y band at x=50%", async () => {
     let call = null;
