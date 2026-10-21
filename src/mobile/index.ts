@@ -165,7 +165,7 @@ export class Mobile {
     if (this.platform === Platform.IOS) {
       return Locator.fromStrategy(this.ctx, { using: 'accessibility id', value: id });
     }
-    return Locator.fromStrategy(this.ctx, { using: 'id', value: id });
+    return Locator.fromStrategy(this.ctx, androidIdStrategy(id));
   }
 
   /** Alias for getById; matches Playwright naming. */
@@ -233,10 +233,8 @@ export class Mobile {
             return this.getByLabel(value);
           case 'text':
             return this.getByText(value);
-          case 'resource-id': {
-            const id = value.includes(':id/') ? value.split(':id/')[1]! : value;
-            return this.getById(id);
-          }
+          case 'resource-id':
+            return this.getById(value);
         }
       }
       if (type && !attr) {
@@ -1151,6 +1149,22 @@ const ANDROID_KEYCODES: Partial<Record<HardwareButton, number>> = {
   POWER: 26,
   ENTER: 66,
 };
+
+// `id` prepends `<appPackage>:id/`, missing unprefixed RN/Compose/Flutter ids, so
+// the any-package regex runs only on a miss. UiSelector doesn't unescape (one `\`
+// suffices); ids containing `"` or `\` can't be embedded and get no fallback.
+function androidIdStrategy(id: string): LocatorStrategy {
+  if (id.includes(':id/') || /["\\]/.test(id)) return { using: 'id', value: id };
+  const pattern = `^(.+:id/)?${id.replace(/[.*+?^${}()|[\]]/g, '\\$&')}$`;
+  return {
+    using: 'id',
+    value: id,
+    fallback: {
+      using: '-android uiautomator',
+      value: `new UiSelector().resourceIdMatches("${pattern}")`,
+    },
+  };
+}
 
 function escapeSingleQuotes(s: string): string {
   return s.replace(/'/g, "\\'");
