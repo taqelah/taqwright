@@ -1833,6 +1833,46 @@ export class Locator {
     return false;
   }
 
+  private async findRaw(
+    strategy: LocatorStrategy,
+    parentIds: string[] | undefined,
+    shortCircuitFirst: boolean,
+  ): Promise<string[]> {
+    if (parentIds === undefined) {
+      try {
+        const refs = (await this.ctx.driver.findElements(
+          strategy.using,
+          strategy.value,
+        )) as ElementRef[];
+        return (refs ?? []).map((r) => r[W3C_ELEMENT_KEY]);
+      } catch {
+        return [];
+      }
+    }
+    const candidates: string[] = [];
+    const seen = new Set<string>();
+    for (const pid of parentIds) {
+      try {
+        const refs = (await this.ctx.driver.findElementsFromElement(
+          pid,
+          strategy.using,
+          strategy.value,
+        )) as ElementRef[];
+        for (const ref of refs ?? []) {
+          const id = ref[W3C_ELEMENT_KEY];
+          if (!seen.has(id)) {
+            seen.add(id);
+            candidates.push(id);
+            if (shortCircuitFirst) return candidates;
+          }
+        }
+      } catch {
+        // skip — this parent yielded nothing
+      }
+    }
+    return candidates;
+  }
+
   /**
    * Find all elements matching this locator's full chain (parent → strategy →
    * textFilter → chain ops → index selector). The primitive that every other
@@ -1845,50 +1885,23 @@ export class Locator {
       return [...this.pinnedIds];
     }
 
-    // 1. Raw candidates — either rooted at each parent id, or global.
-    let candidates: string[] = [];
+    // 1. Raw candidates — either rooted at each parent id, or global. The
+    //    fallback strategy is tried only when the primary finds nothing.
     const shortCircuitFirst =
       this.state.indexSelector?.kind === 'first' &&
       this.state.chainOps.length === 0 &&
       this.strategy.textFilter === undefined;
-
+    let parentIds: string[] | undefined;
     if (this.state.parent) {
-      let parentIds: string[];
       try {
         parentIds = await this.state.parent.resolveAll();
       } catch {
         parentIds = [];
       }
-      const seen = new Set<string>();
-      outer: for (const pid of parentIds) {
-        try {
-          const refs = (await this.ctx.driver.findElementsFromElement(
-            pid,
-            this.strategy.using,
-            this.strategy.value,
-          )) as ElementRef[];
-          for (const ref of refs ?? []) {
-            const id = ref[W3C_ELEMENT_KEY];
-            if (!seen.has(id)) {
-              seen.add(id);
-              candidates.push(id);
-              if (shortCircuitFirst) break outer;
-            }
-          }
-        } catch {
-          // skip — this parent yielded nothing
-        }
-      }
-    } else {
-      try {
-        const refs = (await this.ctx.driver.findElements(
-          this.strategy.using,
-          this.strategy.value,
-        )) as ElementRef[];
-        candidates = (refs ?? []).map((r) => r[W3C_ELEMENT_KEY]);
-      } catch {
-        candidates = [];
-      }
+    }
+    let candidates = await this.findRaw(this.strategy, parentIds, shortCircuitFirst);
+    if (candidates.length === 0 && this.strategy.fallback) {
+      candidates = await this.findRaw(this.strategy.fallback, parentIds, shortCircuitFirst);
     }
 
     // 2. Strategy-level textFilter (legacy path used by getByText(RegExp)).

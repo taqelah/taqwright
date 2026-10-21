@@ -443,6 +443,8 @@ export interface LocatorStrategy {
    * matches that need extra precision.
    */
   textFilter?: string | RegExp;
+  /** Tried only when this strategy finds nothing; error messages keep the primary. */
+  fallback?: LocatorStrategy;
 }
 
 /** WebDriver's W3C element reference key. */

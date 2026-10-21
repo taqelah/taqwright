@@ -1150,16 +1150,19 @@ const ANDROID_KEYCODES: Partial<Record<HardwareButton, number>> = {
   ENTER: 66,
 };
 
-// UiAutomator2's `id` strategy prepends `<appPackage>:id/` to bare values, but
-// RN testID / Compose testTag / Flutter Semantics.identifier emit unprefixed
-// resource-ids. Appium's UiSelector parser doesn't unescape, so one backslash
-// reaches the regex; `"` and `\` can't be embedded, hence the `id` fallback.
+// `id` prepends `<appPackage>:id/`, missing unprefixed RN/Compose/Flutter ids, so
+// the any-package regex runs only on a miss. UiSelector doesn't unescape (one `\`
+// suffices); ids containing `"` or `\` can't be embedded and get no fallback.
 function androidIdStrategy(id: string): LocatorStrategy {
   if (id.includes(':id/') || /["\\]/.test(id)) return { using: 'id', value: id };
   const pattern = `^(.+:id/)?${id.replace(/[.*+?^${}()|[\]]/g, '\\$&')}$`;
   return {
-    using: '-android uiautomator',
-    value: `new UiSelector().resourceIdMatches("${pattern}")`,
+    using: 'id',
+    value: id,
+    fallback: {
+      using: '-android uiautomator',
+      value: `new UiSelector().resourceIdMatches("${pattern}")`,
+    },
   };
 }
 
