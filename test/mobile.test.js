@@ -73,14 +73,14 @@ describe('Mobile.getBy* factories', () => {
     };
   }
 
-  test('Android getById: an exact id hit never tries the any-package fallback', async () => {
+  test('Android getById: an exact id hit never tries the bare-id fallback', async () => {
     const log = lookupLog({ id: [{ [W3C]: 'e1' }] });
     const { mobile } = makeMobile(Platform.ANDROID, { findElements: log.findElements });
     assert.equal(await mobile.getById('title').count(), 1);
     assert.deepEqual(log.calls, [{ using: 'id', value: 'title' }]);
   });
 
-  test('Android getById: an exact id miss falls back to resourceIdMatches', async () => {
+  test('Android getById: an exact id miss falls back to the bare resource-id', async () => {
     const log = lookupLog({
       '-android uiautomator': [{ [W3C]: 'e1' }],
     });
@@ -90,19 +90,9 @@ describe('Mobile.getBy* factories', () => {
       { using: 'id', value: 'foo' },
       {
         using: '-android uiautomator',
-        value: 'new UiSelector().resourceIdMatches("^(.+:id/)?foo$")',
+        value: 'new UiSelector().resourceId("foo")',
       },
     ]);
-  });
-
-  test('Android getById escapes regex metacharacters in the fallback', async () => {
-    const log = lookupLog();
-    const { mobile } = makeMobile(Platform.ANDROID, { findElements: log.findElements });
-    await mobile.getById('cart.item(1)').count();
-    assert.equal(
-      log.calls[1].value,
-      'new UiSelector().resourceIdMatches("^(.+:id/)?cart\\.item\\(1\\)$")',
-    );
   });
 
   test('Android getById has no fallback for fully-qualified or unembeddable ids', async () => {

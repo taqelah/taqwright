@@ -1149,19 +1149,15 @@ const ANDROID_KEYCODES: Partial<Record<HardwareButton, number>> = {
   ENTER: 66,
 };
 
-// `id` prepends `<appPackage>:id/`, missing unprefixed RN/Compose/Flutter ids, so
-// the any-package regex runs only on a miss. UiSelector doesn't unescape (one `\`
-// suffices); ids containing `"` or `\` can't be embedded and get no fallback.
+// `id` prepends `<appPackage>:id/`, missing the unprefixed ids RN/Compose/Flutter
+// emit, so on a miss we retry the bare id verbatim (never another package's).
+// Ids containing `"` or `\` can't be embedded in the selector and get no fallback.
 function androidIdStrategy(id: string): LocatorStrategy {
   if (id.includes(':id/') || /["\\]/.test(id)) return { using: 'id', value: id };
-  const pattern = `^(.+:id/)?${id.replace(/[.*+?^${}()|[\]]/g, '\\$&')}$`;
   return {
     using: 'id',
     value: id,
-    fallback: {
-      using: '-android uiautomator',
-      value: `new UiSelector().resourceIdMatches("${pattern}")`,
-    },
+    fallback: { using: '-android uiautomator', value: `new UiSelector().resourceId("${id}")` },
   };
 }
 
