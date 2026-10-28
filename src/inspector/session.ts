@@ -126,6 +126,17 @@ export interface ConnectRequest {
 }
 
 /**
+ * True when a WebDriver error means the server-side session is gone for good —
+ * typically another client opened a session on the same device and UiAutomator2
+ * / XCUITest restarted under us. Retrying can't recover, so the inspector drops
+ * the dead driver instead of polling it forever.
+ */
+export function isSessionGoneError(err: unknown): boolean {
+  const msg = err instanceof Error ? `${err.name} ${err.message}` : String(err);
+  return /session is either terminated or not started|invalid session id|NoSuchDriver/i.test(msg);
+}
+
+/**
  * Build the `TaqwrightUseOptions` a cloud connect hands to `createDeviceProvider`.
  * Pure (no device/network) so it's unit-tested; `connectCloud` wraps it with the
  * env-var + provider-driving side effects. Codegen is interactive, so it turns the
@@ -337,7 +348,7 @@ export class InspectorSession {
     // If a session is live it belongs to the server we're about to kill —
     // tear it down cleanly first so we don't leave a dangling driver.
     if (this.isConnected()) {
-      await this.disconnect().catch(() => {});
+      await this.disconnect('restarting Appium').catch(() => {});
     }
     if (this.appiumProc && !this.appiumProc.killed) {
       this.appiumProc.kill();
@@ -459,7 +470,7 @@ export class InspectorSession {
    */
   private async abortIfCancelled(): Promise<void> {
     if (!this.aborting) return;
-    await this.disconnect();
+    await this.disconnect('connect cancelled');
     throw new Error('connect cancelled');
   }
 
@@ -472,17 +483,19 @@ export class InspectorSession {
    */
   cancelConnect(): void {
     this.aborting = true;
-    if (this.driver) void this.disconnect();
+    if (this.driver) void this.disconnect('connect cancelled or failed');
   }
 
   /**
    * Tear down the WebDriver session (but leave Appium running). For cloud
    * sessions, the active provider's `syncTestDetails` marks the dashboard
    * status as completed first so the grid doesn't leave it as "Running"
-   * until idle-timeout fires.
+   * until idle-timeout fires. `reason` is logged so a session that vanishes
+   * under an open inspector tab (which then polls into 412s) can be traced.
    */
-  async disconnect(): Promise<void> {
+  async disconnect(reason = 'unspecified'): Promise<void> {
     if (!this.driver) return;
+    console.log(`taqwright inspect: session disconnected (${reason})`);
     if (this.activeProvider?.syncTestDetails) {
       try {
         await this.activeProvider.syncTestDetails({
@@ -514,7 +527,7 @@ export class InspectorSession {
 
   /** Full cleanup: disconnect, then kill any Appium we spawned. */
   async cleanup(): Promise<void> {
-    await this.disconnect();
+    await this.disconnect('inspector shutting down');
     if (this.appiumProc && !this.appiumProc.killed) {
       this.appiumProc.kill();
       this.appiumProc = undefined;

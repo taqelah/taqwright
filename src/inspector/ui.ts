@@ -2147,6 +2147,15 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
     setStatus('snapshot…', true);
     try {
       const r = await fetch('/api/snapshot');
+      if (r.status === 412) {
+        // 412 = the server has no session (Disconnect from another tab, a
+        // cancelled connect, an Appium restart). Polling can't recover from
+        // that, so leave the inspector instead of retrying forever. A body
+        // with a lost message means the device-side session died.
+        const lost = await r.json().catch(() => ({}));
+        onSessionLost(lost.lost);
+        return;
+      }
       if (!r.ok) throw new Error('HTTP ' + r.status);
       const j = await r.json();
       // Capture the selected element's xpath + identity fingerprint AFTER the
@@ -5716,11 +5725,33 @@ await mobile.getByUiSelector('new UiSelector().description("Login")').click();</
     try {
       await fetch('/api/disconnect', { method: 'POST' });
     } catch {}
+    await returnToSetup();
+  };
+
+  async function returnToSetup() {
     state.selected = null;
     state.nodeMap.clear();
     showView('setup');
     await bootstrap();
-  };
+  }
+
+  // The server dropped the session out from under this tab (see the 412
+  // branch in fetchSnapshot). Guarded on the view so a second in-flight
+  // snapshot hitting 412 doesn't toast twice.
+  async function onSessionLost(message) {
+    if (!document.body.classList.contains('view-inspector')) return;
+    stopAutoRefresh();
+    applyRecordingState(false);
+    stickyRelative = null;
+    setScreenUnavailable(false);
+    showToast(
+      message ||
+        'The device session was closed on the server — e.g. Disconnect in another inspector tab. Connect again to continue.',
+      'error',
+      { title: 'Session ended' },
+    );
+    await returnToSetup();
+  }
 
   // ─── Guided tour + Help panel ─────────────────────────────────
   // Spotlight coach-marks over the real controls + a static Help reference.
