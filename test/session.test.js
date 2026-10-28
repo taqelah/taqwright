@@ -7,6 +7,7 @@ import {
   InspectorSession,
   applyLocalCapabilityDefaults,
   buildCloudConnectUse,
+  isSessionGoneError,
 } from '../dist/inspector/session.js';
 import { Platform } from '../dist/types/index.js';
 import { makeFakeDriver } from './fake-driver.js';
@@ -225,5 +226,41 @@ describe('InspectorSession.cancelConnect', () => {
     const s = mkSession();
     assert.doesNotThrow(() => s.cancelConnect());
     assert.equal(s.isConnected(), false);
+  });
+});
+
+describe('InspectorSession.disconnect', () => {
+  test('logs the reason when it tears down a live session', async (t) => {
+    const log = t.mock.method(console, 'log', () => {});
+    const s = mkSession();
+    s.driver = makeFakeDriver({ deleteSession: async () => {} });
+    await s.disconnect('POST /api/disconnect');
+    assert.equal(log.mock.callCount(), 1);
+    assert.match(log.mock.calls[0].arguments[0], /session disconnected \(POST \/api\/disconnect\)/);
+  });
+
+  test('is silent when there is no session', async (t) => {
+    const log = t.mock.method(console, 'log', () => {});
+    await mkSession().disconnect('POST /api/disconnect');
+    assert.equal(log.mock.callCount(), 0);
+  });
+});
+
+describe('isSessionGoneError', () => {
+  test('matches the dead-session errors UiAutomator2 / XCUITest return', () => {
+    assert.ok(
+      isSessionGoneError(
+        new Error('A session is either terminated or not started when running "screenshot"'),
+      ),
+    );
+    assert.ok(isSessionGoneError(new Error('invalid session id')));
+    const nsd = new Error('session gone');
+    nsd.name = 'NoSuchDriverError';
+    assert.ok(isSessionGoneError(nsd));
+  });
+
+  test('leaves transient failures (timeouts, generic errors) alone', () => {
+    assert.equal(isSessionGoneError(new Error('screenshot timed out after 15000ms')), false);
+    assert.equal(isSessionGoneError(new Error('socket hang up')), false);
   });
 });

@@ -33,7 +33,12 @@ import {
   type LocatorSuggestion,
 } from './locator-suggester.js';
 import { INSPECTOR_HTML } from './ui.js';
-import { InspectorSession, type InspectorDefaults, type ConnectRequest } from './session.js';
+import {
+  InspectorSession,
+  isSessionGoneError,
+  type InspectorDefaults,
+  type ConnectRequest,
+} from './session.js';
 import { getSpec, CLOUD_SPECS, type CloudProviderName } from '../providers/index.js';
 import { cloudAuthHeader } from '../providers/cloud.js';
 
@@ -278,7 +283,7 @@ async function handle(
   }
 
   if (method === 'POST' && url === '/api/disconnect') {
-    await session.disconnect();
+    await session.disconnect('POST /api/disconnect');
     json(res, 200, { ok: true });
     return;
   }
@@ -504,6 +509,16 @@ async function handle(
         viewport: { w: rect.width, h: rect.height },
       });
     } catch (err) {
+      if (isSessionGoneError(err)) {
+        // The device-side session died (usually another client took over the
+        // device). Drop it so the UI's 412 path returns to setup with a reason.
+        await session.disconnect('device session terminated externally');
+        json(res, 412, {
+          error: 'device session ended',
+          lost: 'The device session was terminated on the Appium side — usually another tool opened its own session on the same device. Stop that tool or pick another device, then connect again.',
+        });
+        return;
+      }
       json(res, 504, { error: err instanceof Error ? err.message : String(err) });
     }
     return;
