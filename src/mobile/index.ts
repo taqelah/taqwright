@@ -165,7 +165,7 @@ export class Mobile {
     if (this.platform === Platform.IOS) {
       return Locator.fromStrategy(this.ctx, { using: 'accessibility id', value: id });
     }
-    return Locator.fromStrategy(this.ctx, { using: 'id', value: id });
+    return Locator.fromStrategy(this.ctx, androidIdStrategy(id));
   }
 
   /** Alias for getById; matches Playwright naming. */
@@ -233,10 +233,8 @@ export class Mobile {
             return this.getByLabel(value);
           case 'text':
             return this.getByText(value);
-          case 'resource-id': {
-            const id = value.includes(':id/') ? value.split(':id/')[1]! : value;
-            return this.getById(id);
-          }
+          case 'resource-id':
+            return this.getById(value);
         }
       }
       if (type && !attr) {
@@ -1151,6 +1149,18 @@ const ANDROID_KEYCODES: Partial<Record<HardwareButton, number>> = {
   POWER: 26,
   ENTER: 66,
 };
+
+// `id` prepends `<appPackage>:id/`, missing the unprefixed ids RN/Compose/Flutter
+// emit, so on a miss we retry the bare id verbatim (never another package's).
+// Ids containing `"` or `\` can't be embedded in the selector and get no fallback.
+function androidIdStrategy(id: string): LocatorStrategy {
+  if (id.includes(':id/') || /["\\]/.test(id)) return { using: 'id', value: id };
+  return {
+    using: 'id',
+    value: id,
+    fallback: { using: '-android uiautomator', value: `new UiSelector().resourceId("${id}")` },
+  };
+}
 
 function escapeSingleQuotes(s: string): string {
   return s.replace(/'/g, "\\'");

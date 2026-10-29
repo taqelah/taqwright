@@ -4,7 +4,7 @@
 
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { makeMobile } from './fake-driver.js';
+import { makeMobile, W3C } from './fake-driver.js';
 import { Platform } from '../dist/index.js';
 
 // Resolve a locator (count() → resolveAll → findElements) and return the
@@ -52,25 +52,56 @@ describe('Mobile.getBy* factories', () => {
     });
   });
 
-  test('getById → id (Android) / accessibility id (iOS)', async () => {
-    const a = findCapture();
-    assert.deepEqual(
-      await strategyOf(
-        makeMobile(Platform.ANDROID, { findElements: a.findElements }).mobile,
-        (m) => m.getById('foo'),
-        a.cap,
-      ),
+  test('getById → accessibility id (iOS)', async () => {
+    const { findElements, cap } = findCapture();
+    const { mobile } = makeMobile(Platform.IOS, { findElements });
+    assert.deepEqual(await strategyOf(mobile, (m) => m.getById('foo'), cap), {
+      using: 'accessibility id',
+      value: 'foo',
+    });
+  });
+
+  // Record every lookup; `hits` maps a strategy to the element refs it returns.
+  function lookupLog(hits = {}) {
+    const calls = [];
+    return {
+      calls,
+      findElements: async (using, value) => {
+        calls.push({ using, value });
+        return hits[using] ?? [];
+      },
+    };
+  }
+
+  test('Android getById: an exact id hit never tries the bare-id fallback', async () => {
+    const log = lookupLog({ id: [{ [W3C]: 'e1' }] });
+    const { mobile } = makeMobile(Platform.ANDROID, { findElements: log.findElements });
+    assert.equal(await mobile.getById('title').count(), 1);
+    assert.deepEqual(log.calls, [{ using: 'id', value: 'title' }]);
+  });
+
+  test('Android getById: an exact id miss falls back to the bare resource-id', async () => {
+    const log = lookupLog({
+      '-android uiautomator': [{ [W3C]: 'e1' }],
+    });
+    const { mobile } = makeMobile(Platform.ANDROID, { findElements: log.findElements });
+    assert.equal(await mobile.getById('foo').count(), 1);
+    assert.deepEqual(log.calls, [
       { using: 'id', value: 'foo' },
-    );
-    const i = findCapture();
-    assert.deepEqual(
-      await strategyOf(
-        makeMobile(Platform.IOS, { findElements: i.findElements }).mobile,
-        (m) => m.getById('foo'),
-        i.cap,
-      ),
-      { using: 'accessibility id', value: 'foo' },
-    );
+      {
+        using: '-android uiautomator',
+        value: 'new UiSelector().resourceId("foo")',
+      },
+    ]);
+  });
+
+  test('Android getById has no fallback for fully-qualified or unembeddable ids', async () => {
+    for (const id of ['com.app:id/login', 'android:id/content', 'say"hi', 'back\\slash']) {
+      const log = lookupLog();
+      const { mobile } = makeMobile(Platform.ANDROID, { findElements: log.findElements });
+      await mobile.getById(id).count();
+      assert.deepEqual(log.calls, [{ using: 'id', value: id }]);
+    }
   });
 
   test('getByType → class name verbatim', async () => {
@@ -181,7 +212,7 @@ describe('Mobile.getBy* factories — labels, placeholders, roles, xpath, css', 
         (m) => m.getByXpath('//android.widget.EditText[@resource-id="com.app:id/email"]'),
         rid.cap,
       ),
-      { using: 'id', value: 'email' },
+      { using: 'id', value: 'com.app:id/email' },
     );
   });
 
