@@ -102,17 +102,23 @@ describe('Locator strategy fallback', () => {
     assert.deepEqual(seen, ['id']);
   });
 
-  test('a global primary that throws counts as a miss and falls back', async () => {
+  // A W3C findElements answers a miss with [], never a throw, so a throw is a real failure (a
+  // dead session, a WEBVIEW context). Falling back past it would spend a second lookup and turn
+  // the real error into "element not found" after the full timeout.
+  test('a global primary that throws is an error, not a miss: no fallback', async () => {
+    const seen = [];
     const { el: loc } = makeLocator(
       { strategy: withFallback },
       {
         findElements: async (using) => {
-          if (using === 'id') throw new Error('no such element');
+          seen.push(using);
+          if (using === 'id') throw new Error('invalid session id');
           return [el('f1'), el('f2')];
         },
       },
     );
-    assert.equal(await loc.count(), 2);
+    assert.equal(await loc.count(), 0);
+    assert.deepEqual(seen, ['id']);
   });
 
   test('a parent-scoped miss falls back per parent, de-duplicating ids', async () => {
@@ -129,7 +135,7 @@ describe('Locator strategy fallback', () => {
     assert.equal(await parent.locator(withFallback).count(), 3);
   });
 
-  test('a parent-scoped hit under any parent skips the fallback', async () => {
+  test('a parent whose primary lookup throws gets no fallback', async () => {
     const seen = [];
     const { el: parent } = makeLocator(
       {},

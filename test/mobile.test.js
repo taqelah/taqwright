@@ -95,8 +95,8 @@ describe('Mobile.getBy* factories', () => {
     ]);
   });
 
-  test('Android getById has no fallback for fully-qualified or unembeddable ids', async () => {
-    for (const id of ['com.app:id/login', 'android:id/content', 'say"hi', 'back\\slash']) {
+  test('Android getById has no fallback for a fully-qualified id', async () => {
+    for (const id of ['com.app:id/login', 'android:id/content']) {
       const log = lookupLog();
       const { mobile } = makeMobile(Platform.ANDROID, { findElements: log.findElements });
       await mobile.getById(id).count();

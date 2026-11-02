@@ -5,6 +5,7 @@ import {
   type LocatorContext,
   type ScrollIntoViewOptions,
   type DragOptions,
+  androidIdStrategy,
 } from '../locator/index.js';
 import { ANDROID_NAMED_KEYS, IOS_NAMED_KEYS } from '../keys.js';
 import {
@@ -1149,18 +1150,6 @@ const ANDROID_KEYCODES: Partial<Record<HardwareButton, number>> = {
   POWER: 26,
   ENTER: 66,
 };
-
-// `id` prepends `<appPackage>:id/`, missing the unprefixed ids RN/Compose/Flutter
-// emit, so on a miss we retry the bare id verbatim (never another package's).
-// Ids containing `"` or `\` can't be embedded in the selector and get no fallback.
-function androidIdStrategy(id: string): LocatorStrategy {
-  if (id.includes(':id/') || /["\\]/.test(id)) return { using: 'id', value: id };
-  return {
-    using: 'id',
-    value: id,
-    fallback: { using: '-android uiautomator', value: `new UiSelector().resourceId("${id}")` },
-  };
-}
 
 function escapeSingleQuotes(s: string): string {
   return s.replace(/'/g, "\\'");
