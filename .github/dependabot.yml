@@ -26,6 +26,12 @@ updates:
       # typescript-eslint supports TypeScript 7.
       - dependency-name: typescript
         versions: ['>=7.0.0']
+      # webdriver 10 refuses the new-session reply TestMu (LambdaTest) sends — it reads the
+      # session id only from `value`, where 9 also accepted it at the top level — so every
+      # cloud test failed before reaching a device on 1.2.0. This repo's CI runs Appium
+      # locally and cannot see it. Lift this only after a run on a cloud grid passes on 10.
+      - dependency-name: webdriver
+        versions: ['>=10.0.0']
 
   # Keep the GitHub Actions (checkout, setup-node, codeql-action, …) current.
   - package-ecosystem: github-actions
