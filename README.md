@@ -223,6 +223,10 @@ inspector. Credentials are read from the environment — never from the config f
 | `pcloudy`      | `PCLOUDY_USERNAME` / `PCLOUDY_API_KEY`, optionally `PCLOUDY_CLOUD_URL` | `pcloudy:<fileName>`                      |
 
 `DIGITALAI_CLOUD_SERVER` is your tenant URL (e.g. `https://mycloud.experitest.com`).
+
+Every cloud test carries a `taqwright-session` attachment holding its grid session id, added when
+the session starts, so a reporter can link each result to its session and video exactly, pass or
+fail, without relying on the session name written to the dashboard.
 `PCLOUDY_CLOUD_URL` defaults to `https://device.pcloudy.com` (Global). Set it to your
 account's regional cloud — `https://sg.pcloudy.com` (Singapore) or
 `https://us.pcloudy.com` (United States) — or to an enterprise cloud URL. The wrong
