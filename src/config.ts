@@ -3,6 +3,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { PlaywrightTestConfig } from '@playwright/test';
 import { Platform, type TaqwrightConfig, type TaqwrightProjectConfig } from './types/index.js';
+import { addTelemetryReporter } from './telemetry/reporter-path.js';
 
 export const TAQWRIGHT_KEY = '__taqwright__';
 
@@ -50,6 +51,18 @@ async function importConfigFile(filePath: string): Promise<PlaywrightConfigWithE
     config = config.default;
   }
   return config as PlaywrightConfigWithEmbedded;
+}
+
+/** The taqwright config in exactly this file (the one Playwright loaded), if it is one. */
+export async function loadTaqwrightConfigFile(
+  filePath: string,
+): Promise<TaqwrightConfig | undefined> {
+  try {
+    const cfg = await importConfigFile(filePath);
+    return cfg?.[TAQWRIGHT_KEY];
+  } catch {
+    return undefined;
+  }
 }
 
 /** Load the taqwright config from disk, if present. */
@@ -176,7 +189,11 @@ export function defineConfig(config: TaqwrightConfig): PlaywrightConfigWithEmbed
     testDir: config.testDir,
     testMatch: config.testMatch,
     testIgnore: config.testIgnore,
-    reporter: config.reporter as PlaywrightTestConfig['reporter'],
+    // Anonymous usage telemetry joins as one more reporter (src/telemetry/), unless the config
+    // says `telemetry: false` — then the reporters are exactly what the config named.
+    reporter: (config.telemetry === false
+      ? config.reporter
+      : addTelemetryReporter(config.reporter)) as PlaywrightTestConfig['reporter'],
     globalSetup,
     globalTeardown: config.globalTeardown,
     projects: config.projects.map((p) => ({

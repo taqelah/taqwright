@@ -11,6 +11,9 @@ import { runSetup } from '../setup/index.js';
 import { applyManagedEnv } from '../setup/paths.js';
 import { BrandingBuffer } from './branding.js';
 import { brandReportDir } from './report-branding.js';
+import { telemetryEnabled } from '../telemetry/event.js';
+import { appendTelemetryReporter } from '../telemetry/reporter-path.js';
+import { readStoredTelemetry, writeStoredTelemetry } from '../telemetry/store.js';
 
 const _require = createRequire(import.meta.url);
 
@@ -159,6 +162,22 @@ program
     // one-project-per-run path). Ambiguous multi-project runs are left on the
     // config's global cap.
     const cfg = await loadTaqwrightConfig(dirname(configPath));
+
+    // A --reporter flag replaces the config's reporters, including the telemetry one
+    // defineConfig adds, so it is appended to the flag's value here (comma-separated). Not when
+    // telemetry is off; the reporter checks again itself, so this is only to avoid loading it.
+    const reporterAt = args.indexOf('--reporter');
+    if (
+      reporterAt >= 0 &&
+      typeof args[reporterAt + 1] === 'string' &&
+      telemetryEnabled({
+        env: process.env,
+        configTelemetry: cfg?.telemetry,
+        stored: readStoredTelemetry(),
+      })
+    ) {
+      args[reporterAt + 1] = appendTelemetryReporter(args[reporterAt + 1]!);
+    }
     const workers = cfg
       ? resolveCliWorkers(cfg, projectFilter, opts.workers as string | undefined)
       : opts.workers !== undefined
@@ -193,6 +212,38 @@ program
       // ignore — report may be absent (non-html reporter) or unreadable
     }
     process.exit(code);
+  });
+
+// ─── telemetry ──────────────────────────────────────────────────────
+program
+  .command('telemetry [action]')
+  .description('show, enable or disable anonymous usage telemetry (status | enable | disable)')
+  .action((action: string | undefined) => {
+    const a = (action ?? 'status').toLowerCase();
+    if (a === 'enable' || a === 'disable') {
+      const file = writeStoredTelemetry(a === 'enable');
+      console.log(`Telemetry ${a}d (saved in ${file}).`);
+    } else if (a !== 'status') {
+      console.error('usage: taqwright telemetry [status|enable|disable]');
+      process.exit(1);
+    }
+    const env = process.env;
+    const stored = readStoredTelemetry();
+    const on = telemetryEnabled({ env, stored });
+    let why = 'on by default';
+    const flag = String(env.TAQWRIGHT_TELEMETRY ?? '').toLowerCase();
+    if (['0', 'false', 'off', 'no'].includes(flag)) why = 'TAQWRIGHT_TELEMETRY is set off';
+    else if (['1', 'true'].includes(String(env.DO_NOT_TRACK ?? '').toLowerCase()))
+      why = 'DO_NOT_TRACK is set';
+    else if (stored === false) why = '`taqwright telemetry disable`';
+    else if (stored === true) why = '`taqwright telemetry enable`';
+    console.log(`Telemetry is ${on ? 'ON' : 'OFF'} (${why}).`);
+    console.log(
+      'When on, each `taqwright test` run sends one anonymous event: taqwright and Node versions, OS family,\n' +
+        'CI or not, platforms, provider, and the suite size, duration and result as buckets. Never test names,\n' +
+        'paths, app ids, devices, errors or any id. A project can also set `telemetry: false` in its config.\n' +
+        'Details: https://github.com/taqelah/taqwright#telemetry',
+    );
   });
 
 // ─── init ───────────────────────────────────────────────────────────

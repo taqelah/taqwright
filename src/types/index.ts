@@ -399,6 +399,14 @@ export interface TaqwrightConfig extends TestRunnerOptions {
     'list' | 'html' | 'json' | 'junit' | 'line' | 'dot' | Array<[string] | [string, unknown]>;
   globalSetup?: string | string[];
   globalTeardown?: string | string[];
+  /**
+   * Anonymous usage telemetry: one event per `taqwright test` run — taqwright and Node versions,
+   * OS family, CI or not, platforms, provider, and the suite's size, duration and result as
+   * buckets. Never test names, paths, app ids, devices, errors or any id. On by default; `false`
+   * turns it off for this project (so do `TAQWRIGHT_TELEMETRY=0`, `DO_NOT_TRACK=1` and
+   * `taqwright telemetry disable`). See the README, "Telemetry".
+   */
+  telemetry?: boolean;
 }
 
 export interface BoundingBox {
