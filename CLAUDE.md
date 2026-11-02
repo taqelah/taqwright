@@ -66,6 +66,10 @@ The CLI splits into delegators and direct commands:
   - `devices` — `adb devices -l` + `xcrun simctl list devices available`.
   - `doctor` — runs `runDoctorChecks()` from [src/doctor.ts](src/doctor.ts) (shared with the inspector's setup view).
 
+### Telemetry ([src/telemetry/](src/telemetry/))
+
+Anonymous usage counts, **on by default**, documented in the README's Telemetry section (the disclosure; there is deliberately no terminal notice). One event per `taqwright test` run, sent by a Playwright **reporter** ([reporter.ts](src/telemetry/reporter.ts)) because only Playwright knows the test count, duration and result. It joins a run two ways, both needed: `defineConfig` adds it to the config's reporters (unless `telemetry: false`), and the `test` CLI appends it to a `--reporter` value, because a `--reporter` flag replaces the config's reporters — and LIME's CI runs with `--reporter json`. The reporter **prints nothing** (`printsToStdio` false): `--reporter json` writes its report to stdout. The event ([event.ts](src/telemetry/event.ts)) is ten fields from fixed sets that **lime-core's `POST /api/telemetry` validates exactly** (`services/taqwright-telemetry.js` there) — add a field on both sides together, or the server refuses every event. Off switches, any one wins: `TAQWRIGHT_TELEMETRY=0`, `DO_NOT_TRACK=1`, `telemetry: false`, `taqwright telemetry disable` (`~/.taqwright/telemetry.json`, the only thing written). Sending never throws, retries or prints, and gives up after 1.5s. This repo's own CI sets `TAQWRIGHT_TELEMETRY=0` at workflow level so it never counts itself.
+
 ### Fixture lifecycle ([src/fixture/index.ts](src/fixture/index.ts))
 
 Four fixtures, layered:

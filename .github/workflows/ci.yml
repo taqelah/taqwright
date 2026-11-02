@@ -10,6 +10,10 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# taqwright's own CI must not count itself in the usage telemetry it ships.
+env:
+  TAQWRIGHT_TELEMETRY: '0'
+
 jobs:
   format:
     name: Format

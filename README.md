@@ -366,6 +366,55 @@ Serve the HTML report. `--host <host>` (default `localhost`) · `--port <port>` 
 
 Merge blob reports into a single report. `--reporter <r>` · `-c, --config <file>`
 
+### `taqwright telemetry [status|enable|disable]`
+
+Shows whether anonymous usage telemetry is on and why, or turns it on or off for this machine.
+See [Telemetry](#telemetry).
+
+## Telemetry
+
+taqwright collects **anonymous usage counts** to learn how it is used: which versions, platforms
+and providers, and how big and how long test runs are. It is **on by default** and easy to turn off.
+
+**What is sent:** one small event at the end of each `taqwright test` run, and nothing else:
+
+| Field       | Example       | Values                                                                               |
+| ----------- | ------------- | ------------------------------------------------------------------------------------ |
+| `v`         | `1.3.0`       | the taqwright version                                                                |
+| `node`      | `24`          | the Node.js major version                                                            |
+| `os`        | `darwin`      | `darwin`, `linux`, `win32` or `other`                                                |
+| `ci`        | `true`        | whether the run is in CI                                                             |
+| `cmd`       | `test`        | the command                                                                          |
+| `platforms` | `["android"]` | `android` and/or `ios`, for the projects that ran                                    |
+| `provider`  | `lambdatest`  | `local`, `emulator`, `lambdatest`, `browserstack`, `digitalai`, `pcloudy` or `other` |
+| `tests`     | `11-50`       | how many tests ran: `1-10`, `11-50`, `51-200` or `200+`                              |
+| `duration`  | `1-5m`        | how long the run took: `<1m`, `1-5m`, `5-15m` or `15m+`                              |
+| `passed`    | `true`        | whether the run passed                                                               |
+
+**What is never sent:** test names, file paths, app or bundle ids, device names, error messages,
+hostnames, user or repository names, environment variables — and no id of any kind, so one run
+cannot be linked to another.
+
+**Where it goes:** `https://www.taqwright.ai/api/telemetry`, run by the taqwright team. The server
+keeps only **daily counts** of these values (never individual events, never your IP address) for
+13 months. Sending never slows a run by more than about a second, never retries, never prints
+anything and never changes a run's result. A `--list` run, or one with no tests, sends nothing.
+
+**Turning it off** — any one of these, and an off switch always wins:
+
+```bash
+export TAQWRIGHT_TELEMETRY=0     # this shell / CI job
+export DO_NOT_TRACK=1            # the cross-tool convention
+npx taqwright telemetry disable  # this machine (saved in ~/.taqwright/telemetry.json)
+```
+
+```ts
+// taqwright.config.ts — this project, for everyone who runs it
+export default defineConfig({ telemetry: false, projects: [/* … */] });
+```
+
+`npx taqwright telemetry status` says whether it is on, and why.
+
 ## Guides
 
 | Guide                                                                       | What it covers                                                      |
