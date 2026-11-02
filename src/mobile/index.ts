@@ -5,6 +5,7 @@ import {
   type LocatorContext,
   type ScrollIntoViewOptions,
   type DragOptions,
+  androidIdStrategy,
 } from '../locator/index.js';
 import { ANDROID_NAMED_KEYS, IOS_NAMED_KEYS } from '../keys.js';
 import {
@@ -165,7 +166,7 @@ export class Mobile {
     if (this.platform === Platform.IOS) {
       return Locator.fromStrategy(this.ctx, { using: 'accessibility id', value: id });
     }
-    return Locator.fromStrategy(this.ctx, { using: 'id', value: id });
+    return Locator.fromStrategy(this.ctx, androidIdStrategy(id));
   }
 
   /** Alias for getById; matches Playwright naming. */
@@ -233,10 +234,8 @@ export class Mobile {
             return this.getByLabel(value);
           case 'text':
             return this.getByText(value);
-          case 'resource-id': {
-            const id = value.includes(':id/') ? value.split(':id/')[1]! : value;
-            return this.getById(id);
-          }
+          case 'resource-id':
+            return this.getById(value);
         }
       }
       if (type && !attr) {

@@ -93,7 +93,14 @@ export function generateCandidates(
 
     // ─── Category: id ─────────────────────────────────────────────
     if (resourceId) {
-      const shortId = resourceId.includes(':id/') ? resourceId.split(':id/')[1]! : resourceId;
+      // getById('x') looks for `<appPackage>:id/x`, then the bare `x`. So the short form is
+      // right only for an id in the element's OWN package (every node in an Android page
+      // source carries `package`); `android:id/title` or a library's id would become a
+      // locator that matches nothing, so it keeps its full form, which getById resolves
+      // exactly. A bare id (React Native, Compose, Flutter) is used as it is.
+      const at = resourceId.indexOf(':id/');
+      const ownPackage = at > 0 && attrs['package'] && resourceId.slice(0, at) === attrs['package'];
+      const shortId = ownPackage ? resourceId.slice(at + ':id/'.length) : resourceId;
       out.push({
         category: 'id',
         subLabel: 'resource-id',

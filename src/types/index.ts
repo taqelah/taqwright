@@ -443,6 +443,12 @@ export interface LocatorStrategy {
    * matches that need extra precision.
    */
   textFilter?: string | RegExp;
+  /**
+   * Tried only when this strategy finds nothing; error messages keep the primary. One level,
+   * and a bare `using`/`value`: the locator's own `textFilter` and chain apply to whatever it
+   * finds, so a fallback carrying its own would be a second, silently ignored set of rules.
+   */
+  fallback?: Pick<LocatorStrategy, 'using' | 'value'>;
 }
 
 /** WebDriver's W3C element reference key. */

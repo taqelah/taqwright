@@ -198,6 +198,14 @@ export class Locator {
    */
   private readonly pinnedIds?: readonly string[];
 
+  /**
+   * True once the strategy's `fallback` is what matched (and the primary did not), so the next
+   * lookup tries it first. A poll — `waitFor`, an `expect` that retries, `scrollIntoView`'s
+   * loop — then pays one device lookup per iteration instead of a miss plus a hit. Reset as soon
+   * as the primary matches again.
+   */
+  private preferFallback = false;
+
   /** @internal */
   constructor(
     private readonly ctx: LocatorContext,
@@ -1834,6 +1842,71 @@ export class Locator {
   }
 
   /**
+   * Raw candidates for `strategies` (the strategy, then its fallback — in the order to try
+   * them), globally or under each parent id. The second is tried only where the first found
+   * nothing, and decided PER PARENT: under a list mixing native rows (`pkg:id/row`) and React
+   * Native rows (bare `row`), a primary hit under one row must not hide the fallback's hit under
+   * another. A lookup that THROWS is never followed by a fallback: a W3C `findElements` answers a
+   * miss with `[]`, so a throw is a real failure (a dead session, a WEBVIEW context), and trying
+   * a second strategy would only spend another round trip and bury the cause.
+   *
+   * `used` says which strategies produced candidates, by index into `strategies`.
+   */
+  private async findRaw(
+    strategies: ReadonlyArray<Pick<LocatorStrategy, 'using' | 'value'>>,
+    parentIds: string[] | undefined,
+    shortCircuitFirst: boolean,
+  ): Promise<{ ids: string[]; used: Set<number> }> {
+    const used = new Set<number>();
+    if (parentIds === undefined) {
+      for (let i = 0; i < strategies.length; i++) {
+        let refs: ElementRef[];
+        try {
+          refs = ((await this.ctx.driver.findElements(
+            strategies[i]!.using,
+            strategies[i]!.value,
+          )) ?? []) as ElementRef[];
+        } catch {
+          return { ids: [], used };
+        }
+        if (refs.length) {
+          used.add(i);
+          return { ids: refs.map((r) => r[W3C_ELEMENT_KEY]), used };
+        }
+      }
+      return { ids: [], used };
+    }
+    const candidates: string[] = [];
+    const seen = new Set<string>();
+    for (const pid of parentIds) {
+      for (let i = 0; i < strategies.length; i++) {
+        let refs: ElementRef[];
+        try {
+          refs = ((await this.ctx.driver.findElementsFromElement(
+            pid,
+            strategies[i]!.using,
+            strategies[i]!.value,
+          )) ?? []) as ElementRef[];
+        } catch {
+          break; // this parent yielded nothing; never fall back past an error
+        }
+        if (!refs.length) continue;
+        used.add(i);
+        for (const ref of refs) {
+          const id = ref[W3C_ELEMENT_KEY];
+          if (!seen.has(id)) {
+            seen.add(id);
+            candidates.push(id);
+            if (shortCircuitFirst) return { ids: candidates, used };
+          }
+        }
+        break; // this parent answered; the other strategy is not needed here
+      }
+    }
+    return { ids: candidates, used };
+  }
+
+  /**
    * Find all elements matching this locator's full chain (parent → strategy →
    * textFilter → chain ops → index selector). The primitive that every other
    * resolution method funnels through.
@@ -1845,51 +1918,53 @@ export class Locator {
       return [...this.pinnedIds];
     }
 
-    // 1. Raw candidates — either rooted at each parent id, or global.
-    let candidates: string[] = [];
+    // 1. Raw candidates — either rooted at each parent id, or global. A
+    //    `fallback` is tried where the primary finds nothing (see findRaw).
     const shortCircuitFirst =
       this.state.indexSelector?.kind === 'first' &&
       this.state.chainOps.length === 0 &&
       this.strategy.textFilter === undefined;
-
+    let parentIds: string[] | undefined;
     if (this.state.parent) {
-      let parentIds: string[];
       try {
         parentIds = await this.state.parent.resolveAll();
       } catch {
         parentIds = [];
       }
-      const seen = new Set<string>();
-      outer: for (const pid of parentIds) {
-        try {
-          const refs = (await this.ctx.driver.findElementsFromElement(
-            pid,
-            this.strategy.using,
-            this.strategy.value,
-          )) as ElementRef[];
-          for (const ref of refs ?? []) {
-            const id = ref[W3C_ELEMENT_KEY];
-            if (!seen.has(id)) {
-              seen.add(id);
-              candidates.push(id);
-              if (shortCircuitFirst) break outer;
-            }
-          }
-        } catch {
-          // skip — this parent yielded nothing
-        }
-      }
-    } else {
-      try {
-        const refs = (await this.ctx.driver.findElements(
-          this.strategy.using,
-          this.strategy.value,
-        )) as ElementRef[];
-        candidates = (refs ?? []).map((r) => r[W3C_ELEMENT_KEY]);
-      } catch {
-        candidates = [];
+    }
+    const fallback = this.strategy.fallback;
+    if (!fallback) {
+      return this.narrow((await this.findRaw([this.strategy], parentIds, shortCircuitFirst)).ids);
+    }
+    // The strategy that matched last time goes first (see `preferFallback`).
+    const order = this.preferFallback ? [fallback, this.strategy] : [this.strategy, fallback];
+    const raw = await this.findRaw(order, parentIds, shortCircuitFirst);
+    let result = await this.narrow(raw.ids);
+    let used = raw.used;
+    // AFTER THE CHAIN, NOT BEFORE IT. The first strategy's matches can all be narrowed away — a
+    // hidden native view that `filter({ visible: true })` removes, beside the visible React Native
+    // one the bare id would have found. Then the other strategy gets its turn on its own.
+    if (result.length === 0 && raw.used.size === 1 && raw.used.has(0)) {
+      const other = await this.findRaw([order[1]!], parentIds, shortCircuitFirst);
+      if (other.ids.length) {
+        result = await this.narrow(other.ids);
+        used = new Set([1]);
       }
     }
+    if (result.length) {
+      const fromFallback = (i: number) => order[i] === fallback;
+      const onlyFallback = [...used].every(fromFallback);
+      this.preferFallback = used.size > 0 && onlyFallback;
+    }
+    return result;
+  }
+
+  /**
+   * Steps 2-4 of `resolveAll` — the locator's own text filter, its chain ops and its index
+   * selector — over a set of raw candidates.
+   */
+  private async narrow(raw: string[]): Promise<string[]> {
+    let candidates = raw;
 
     // 2. Strategy-level textFilter (legacy path used by getByText(RegExp)).
     if (this.strategy.textFilter !== undefined) {
@@ -2275,10 +2350,35 @@ export { DEFAULT_TIMEOUT as DEFAULT_LOCATOR_TIMEOUT };
  * inverse of the inspector's serialization — used server-side to drive
  * the device for chained locator actions posted from the inspector UI.
  */
+/**
+ * Android's `id` strategy prepends `<appPackage>:id/`, which misses the unprefixed ids React
+ * Native, Compose and Flutter emit; so a bare id falls back to `resourceId("<id>")` — that id
+ * verbatim, never another package's. A fully-qualified id (`pkg:id/x`) is exact already and gets
+ * none. The id is embedded with JSON escaping, the same as every other UiSelector string here,
+ * so a quote or backslash in a testTag is escaped rather than costing the fallback.
+ *
+ * Shared by `Mobile.getById` and descriptor replay, so the inspector resolves an id the way the
+ * test it suggests will.
+ */
+export function androidIdStrategy(id: string): LocatorStrategy {
+  if (id.includes(':id/')) return { using: 'id', value: id };
+  return {
+    using: 'id',
+    value: id,
+    fallback: {
+      using: '-android uiautomator',
+      value: `new UiSelector().resourceId(${JSON.stringify(id)})`,
+    },
+  };
+}
+
 export function buildLocatorFromDescriptor(ctx: LocatorContext, desc: LocatorDescriptor): Locator {
   switch (desc.kind) {
     case 'leaf': {
-      const strategy: LocatorStrategy = { using: desc.using, value: desc.value };
+      const strategy: LocatorStrategy =
+        desc.using === 'id' && ctx.platform === Platform.ANDROID
+          ? androidIdStrategy(desc.value)
+          : { using: desc.using, value: desc.value };
       const tf = deserializeText(desc.textFilter);
       if (tf !== undefined) strategy.textFilter = tf;
       return Locator.fromStrategy(ctx, strategy);

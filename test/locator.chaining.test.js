@@ -81,3 +81,91 @@ describe('Locator.filter', () => {
     assert.throws(() => loc.filter({ visible: false }), /not supported/);
   });
 });
+
+describe('Locator strategy fallback', () => {
+  const PRIMARY = { using: 'id', value: 'p' };
+  const FALLBACK = { using: 'xpath', value: '//f' };
+  const withFallback = { ...PRIMARY, fallback: FALLBACK };
+
+  test('a global primary hit never runs the fallback', async () => {
+    const seen = [];
+    const { el: loc } = makeLocator(
+      { strategy: withFallback },
+      {
+        findElements: async (using) => {
+          seen.push(using);
+          return [el('a')];
+        },
+      },
+    );
+    assert.equal(await loc.count(), 1);
+    assert.deepEqual(seen, ['id']);
+  });
+
+  // A W3C findElements answers a miss with [], never a throw, so a throw is a real failure (a
+  // dead session, a WEBVIEW context). Falling back past it would spend a second lookup and turn
+  // the real error into "element not found" after the full timeout.
+  test('a global primary that throws is an error, not a miss: no fallback', async () => {
+    const seen = [];
+    const { el: loc } = makeLocator(
+      { strategy: withFallback },
+      {
+        findElements: async (using) => {
+          seen.push(using);
+          if (using === 'id') throw new Error('invalid session id');
+          return [el('f1'), el('f2')];
+        },
+      },
+    );
+    assert.equal(await loc.count(), 0);
+    assert.deepEqual(seen, ['id']);
+  });
+
+  test('a parent-scoped miss falls back per parent, de-duplicating ids', async () => {
+    const { el: parent } = makeLocator(
+      {},
+      {
+        findElements: async () => [el('p1'), el('p2')],
+        findElementsFromElement: async (pid, using) => {
+          if (using === 'id') return [];
+          return pid === 'p1' ? [el('x'), el('y')] : [el('y'), el('z')];
+        },
+      },
+    );
+    assert.equal(await parent.locator(withFallback).count(), 3);
+  });
+
+  test('a parent whose primary lookup throws gets no fallback', async () => {
+    const seen = [];
+    const { el: parent } = makeLocator(
+      {},
+      {
+        findElements: async () => [el('p1'), el('p2')],
+        findElementsFromElement: async (pid, using) => {
+          seen.push(using);
+          if (pid === 'p1') throw new Error('stale parent');
+          return [el('c')];
+        },
+      },
+    );
+    assert.equal(await parent.locator(withFallback).count(), 1);
+    assert.deepEqual(seen, ['id', 'id']);
+  });
+
+  test('first() stops at the first parent-scoped fallback hit', async () => {
+    let fallbackCalls = 0;
+    const { el: parent } = makeLocator(
+      {},
+      {
+        findElements: async () => [el('p1'), el('p2')],
+        findElementsFromElement: async (_pid, using) => {
+          if (using === 'id') return [];
+          fallbackCalls++;
+          return [el('x')];
+        },
+      },
+    );
+    assert.equal(await parent.locator(withFallback).first().count(), 1);
+    assert.equal(fallbackCalls, 1);
+  });
+});
