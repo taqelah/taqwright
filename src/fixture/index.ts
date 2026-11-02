@@ -27,6 +27,7 @@ import { createDeviceProvider, isCloudProvider } from '../providers/index.js';
 import { Tracer } from '../tracer/index.js';
 import { wrapForTracing } from '../tracer/proxy.js';
 import { shouldRetainArtifact } from './artifact-mode.js';
+import { cloudSessionAttachment } from './cloud-session.js';
 import type { HarLog } from '../network/har.js';
 import {
   prepareNetworkProxy,
@@ -358,6 +359,20 @@ export const test = baseTest.extend<TaqwrightFixtures, TaqwrightWorkerFixtures>(
     // session is deleted, on the same worker-scoped provider instance that
     // created it. Mirrors the inspector's `disconnect()`.
     const handle = await deviceProvider.getDevice();
+    // The session id, attached before the test body runs so a failing or crashing
+    // test still has it: a report links the result to its grid session (and video)
+    // by this id, not by the dashboard name `syncTestDetails` may fail to write.
+    const session = cloudSessionAttachment(handle);
+    if (session) {
+      try {
+        await testInfo.attach(session.name, {
+          body: session.body,
+          contentType: session.contentType,
+        });
+      } catch {
+        // best-effort — an attachment never fails a test
+      }
+    }
     try {
       await use(handle.driver);
     } finally {
