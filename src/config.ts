@@ -140,6 +140,9 @@ export function defineConfig(config: TaqwrightConfig): PlaywrightConfigWithEmbed
   const autoDiscoverMisconfig = findAutoDiscoverMisconfig(config);
   if (autoDiscoverMisconfig) throw new Error(autoDiscoverMisconfig);
 
+  const sessionScopeMisconfig = findSessionScopeMisconfig(config);
+  if (sessionScopeMisconfig) throw new Error(sessionScopeMisconfig);
+
   // When any project opts into auto-discovery — or has a static Android
   // emulator `pool` with `autoStartDevice` — prepend our internal globalSetup
   // hook (it resolves the per-worker pool and pre-boots the assigned devices
@@ -207,6 +210,13 @@ export function defineConfig(config: TaqwrightConfig): PlaywrightConfigWithEmbed
       grep: p.grep,
       grepInvert: p.grepInvert,
       dependencies: p.dependencies,
+      // `sessionScope: 'file'` shares one session across a spec file, so the
+      // file's tests must stay in order on one worker. Force it on this project
+      // only; Playwright lets a project override the top-level `fullyParallel`,
+      // and every other project keeps the global setting.
+      ...((p.use as { sessionScope?: unknown }).sessionScope === 'file'
+        ? { fullyParallel: false }
+        : {}),
       // The user's `use` block (TaqwrightUseOptions) is intentionally NOT
       // forwarded to Playwright — the fixture re-reads it at runtime via
       // getUseOptions() using the stashed project name below.
@@ -364,6 +374,44 @@ export function findAutoDiscoverMisconfig(config: TaqwrightConfig): string | nul
         `\`device.autoDiscover\` on project "${project.name}" needs ` +
           `\`appium.autoStartDevice\` to boot/attach AVDs, but it's set to ` +
           `false. Remove \`appium.autoStartDevice: false\`.`,
+      );
+    }
+  }
+  return problems.length ? `taqwright: ${problems.join('\ntaqwright: ')}` : null;
+}
+
+/**
+ * `use.sessionScope: 'file'` shares one session across a spec file's tests, so
+ * those tests depend on each other's app state. It rejects what would break
+ * with a shared session:
+ *
+ * - `network` capture sets the device proxy per test, around a per-test session.
+ * - any value other than `'test'` / `'file'` (a typo from a plain-JS config).
+ *
+ * A top-level `fullyParallel: true` is fine: `defineConfig` sets
+ * `fullyParallel: false` on file-scoped projects. Serial mode
+ * (`test.describe.configure({ mode: 'serial' })`) is invisible to a config
+ * check, so it is documented rather than enforced. Returns an actionable
+ * error (one line per offending project, `taqwright:`-prefixed) or `null`.
+ */
+export function findSessionScopeMisconfig(config: TaqwrightConfig): string | null {
+  const problems: string[] = [];
+  for (const project of config.projects) {
+    const scope = (project.use as { sessionScope?: unknown }).sessionScope;
+    if (scope === undefined || scope === 'test') continue;
+    if (scope !== 'file') {
+      problems.push(
+        `project "${project.name}" has \`sessionScope: ${JSON.stringify(scope)}\` — ` +
+          `use 'test' (the default) or 'file'.`,
+      );
+      continue;
+    }
+    const network = project.use.network ?? 'off';
+    if (network !== 'off') {
+      problems.push(
+        `project "${project.name}" has \`sessionScope: 'file'\` with ` +
+          `\`network: '${network}'\`. Network capture is not supported with a ` +
+          `file-scoped session yet — set \`network: 'off'\`, or use \`sessionScope: 'test'\`.`,
       );
     }
   }

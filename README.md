@@ -208,6 +208,54 @@ export default defineConfig({
 
 Every `defineConfig` / `use` option is documented in the [Configuration guide](https://www.taqwright.dev/docs/configuration).
 
+### Sharing a session across a spec file
+
+By default every test gets a fresh Appium session. For a long user journey split into
+several tests (log in → browse → add to cart → checkout), set `sessionScope: 'file'` on the
+project so the tests of one spec file share a single session and app state:
+
+```ts
+{
+  name: 'android-journeys',
+  use: {
+    platform: Platform.ANDROID,
+    device: { provider: 'emulator', name: 'Pixel_8_API_35' },
+    buildPath: '/abs/path/to/app.apk',
+    appBundleId: 'com.example.app',
+    resetBetweenTests: true, // runs once, at the start of each file
+    sessionScope: 'file',
+  },
+}
+```
+
+```ts
+// tests/checkout-journey.spec.ts
+import { test, expect } from '@taqwright/taqwright';
+
+test.describe.configure({ mode: 'serial' }); // required
+
+test('log in', async ({ mobile }) => {
+  /* … */
+});
+test('add to cart', async ({ mobile }) => {
+  /* still logged in */
+});
+```
+
+- The file's first test opens the session; the others reuse it. When the worker moves to
+  another file, the session is closed and a new one opened, so files never share state.
+- Each test still has its own result, video, trace and `taqwright-session` attachment.
+- On a cloud grid, each file is one dashboard session, named after the file and marked
+  failed if any of its tests failed.
+- Use `mode: 'serial'`. taqwright cannot detect it: without it, a failure lets the rest
+  of the file carry on in a new worker, on a new session, without the earlier state.
+  A retry also starts the file over on a new session.
+- The project's tests always run in file order on one worker: `defineConfig` turns
+  `fullyParallel` off for that project, even when it is on at the top level. Other
+  projects keep the top-level setting.
+- `defineConfig` rejects `sessionScope: 'file'` with `network` capture (not supported
+  with a shared session yet).
+
 ### Cloud devices
 
 Point a project's `device.provider` at a cloud grid and taqwright handles the app

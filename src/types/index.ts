@@ -323,7 +323,28 @@ interface TaqwrightUseOptionsBase {
    * crash). Host traffic during the test routes through the same proxy.
    */
   network?: NetworkMode;
+  /**
+   * How long one Appium session lives.
+   *
+   * - `'test'` (default) — a fresh session for every test.
+   * - `'file'` — one session per spec file: opened by the file's first test,
+   *   reused by every later test in that file, closed when the worker moves to
+   *   another file. App state (for example, being logged in) carries over from
+   *   test to test, so the file must run in serial mode —
+   *   `test.describe.configure({ mode: 'serial' })`. Trace, video and the
+   *   `taqwright-session` attachment stay per test. `resetBetweenTests` runs once,
+   *   at the start of each file. On a cloud grid each file is one dashboard
+   *   session, named after the file and marked failed if any of its tests failed.
+   *
+   * A failed test makes Playwright replace the worker, so a retry or any later
+   * test starts on a new session. `defineConfig` keeps the project's tests in
+   * file order (`fullyParallel: false` on this project, whatever the top-level
+   * setting), and throws if `'file'` is combined with `network` capture.
+   */
+  sessionScope?: SessionScope;
 }
+
+export type SessionScope = 'test' | 'file';
 
 export type TraceMode = 'off' | 'on' | 'on-failure' | 'retain-on-failure';
 
