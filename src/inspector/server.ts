@@ -12,7 +12,12 @@ import {
   type LocatorStrategy,
   type CloudDevice,
 } from '../types/index.js';
-import { Locator, buildLocatorFromDescriptor, type LocatorContext } from '../locator/index.js';
+import {
+  Locator,
+  androidIdStrategy,
+  buildLocatorFromDescriptor,
+  type LocatorContext,
+} from '../locator/index.js';
 import type { SwipeDirection, RecordedLocator } from './recorder.js';
 import { toStepsPython, toStepsJava } from './codegen-appium.js';
 import { runDoctorChecks } from '../doctor.js';
@@ -575,13 +580,8 @@ async function handle(
       const verified: LocatorSuggestion[] = [];
       for (const c of candidates) {
         if (gen !== session.suggestGen) break; // superseded mid-loop — stop issuing commands
-        let refs: Array<Record<string, string>> = [];
-        try {
-          const r = await driver.findElements(c.using, c.value);
-          refs = Array.isArray(r) ? (r as Array<Record<string, string>>) : [];
-        } catch {
-          // Invalid selector for this driver — refs stays empty.
-        }
+        // Counted the way the emitted snippet resolves (see findCandidateRefs).
+        const refs = await findCandidateRefs(driver, platform, c);
         const count = refs.length;
         verified.push({ ...c, count, unique: count === 1 });
 
@@ -1311,6 +1311,41 @@ function json(res: ServerResponse, status: number, body: unknown): void {
  * instead of freezing the inspector. The underlying command still drains in
  * Appium's own queue; this only frees our side.
  */
+/**
+ * The elements a suggested candidate matches, found the way its emitted snippet will find them,
+ * so the panel's count (and so "unique", the recommended pick and any `.nth(i)` variant) agrees
+ * with what the test does.
+ *
+ * Only an Android `id` candidate differs from a plain `findElements`: the snippet is
+ * `mobile.getById(...)`, which goes through `androidIdStrategy`. UiAutomator2 prepends
+ * `<appPackage>:id/` to an `id` lookup, so a bare React Native / Compose / Flutter id would
+ * count 0 while `getById` finds it through its `resourceId("<id>")` fallback (#127). Same order
+ * as `Locator.findRaw`: the fallback runs only when the primary found nothing, never after a
+ * throw (a W3C miss is `[]`; a throw is a real failure). iOS `getById` is `accessibility id`
+ * with no fallback, which is exactly the iOS candidate's own strategy, so it needs nothing here.
+ */
+export async function findCandidateRefs(
+  driver: Pick<WebDriverClient, 'findElements'>,
+  platform: Platform,
+  candidate: { using: string; value: string },
+): Promise<Array<Record<string, string>>> {
+  const strategy: { using: string; value: string; fallback?: { using: string; value: string } } =
+    platform === Platform.ANDROID && candidate.using === 'id'
+      ? androidIdStrategy(candidate.value)
+      : candidate;
+  const order = strategy.fallback ? [strategy, strategy.fallback] : [strategy];
+  for (const s of order) {
+    let refs: unknown;
+    try {
+      refs = await driver.findElements(s.using, s.value);
+    } catch {
+      return []; // invalid selector for this driver, or a dead session
+    }
+    if (Array.isArray(refs) && refs.length > 0) return refs as Array<Record<string, string>>;
+  }
+  return [];
+}
+
 export function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   return Promise.race([
     p,
