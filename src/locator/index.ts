@@ -1971,9 +1971,13 @@ export class Locator {
       candidates = await this.filterIdsByText(candidates, this.strategy.textFilter, true);
     }
 
-    // 3. Chain ops, in declaration order. Each op narrows the candidate set.
+    // 3. Chain ops, in declaration order. `filter` and `and` narrow the
+    //    candidate set; `or` adds to it. So an empty set skips only the
+    //    narrowing ops (nothing to narrow, and no device calls) — an `or` must
+    //    still run, or `a.or(b)` never falls back to `b` when `a` is absent
+    //    (#137), and an `or` after a step that emptied the set is lost too.
     for (const op of this.state.chainOps) {
-      if (candidates.length === 0) break;
+      if (candidates.length === 0 && op.kind !== 'or') continue;
       if (op.kind === 'filter') {
         candidates = await this.applyFilterOp(candidates, op.filter);
       } else if (op.kind === 'and') {
