@@ -63,6 +63,79 @@ describe('Locator and() / or() set ops', () => {
   });
 });
 
+describe('Locator or() when the first locator matches nothing (#137)', () => {
+  // A screen with LOGIN and CANCEL only; every other label is absent. Each
+  // lookup is logged so a test can assert what was (not) queried.
+  function screenDriver(extra = {}) {
+    const lookups = [];
+    const screen = { LOGIN: ['login'], CANCEL: ['cancel'] };
+    return {
+      lookups,
+      driver: {
+        findElements: async (_using, value) => {
+          lookups.push(value);
+          return (screen[value] ?? []).map(el);
+        },
+        getElementText: async (id) => id,
+        ...extra,
+      },
+    };
+  }
+  function on(screen) {
+    const {
+      el: first,
+      ctx,
+      driver,
+    } = makeLocator({ strategy: { using: 'accessibility id', value: 'SIGN IN' } }, screen.driver);
+    const by = (label) => Locator.fromStrategy(ctx, { using: 'accessibility id', value: label });
+    return { first, by, driver };
+  }
+
+  test('a.or(b) resolves to b when a is absent', async () => {
+    const { first, by } = on(screenDriver());
+    const loc = first.or(by('LOGIN'));
+    assert.equal(await loc.count(), 1);
+    assert.equal(await loc.getText(), 'login');
+  });
+
+  test('a.or(b) clicks b when a is absent', async () => {
+    const clicked = [];
+    const { first, by } = on(screenDriver({ elementClick: async (id) => clicked.push(id) }));
+    await first.or(by('LOGIN')).click();
+    assert.deepEqual(clicked, ['login']);
+  });
+
+  test('a.or(b) matches nothing when both are absent', async () => {
+    const { first, by } = on(screenDriver());
+    assert.equal(await first.or(by('MISSING')).count(), 0);
+  });
+
+  test('an or() after an and() that emptied the set still adds its matches', async () => {
+    const { by } = on(screenDriver());
+    // (LOGIN ∩ CANCEL) = ∅, then ∪ LOGIN = {login}
+    assert.equal(await by('LOGIN').and(by('CANCEL')).or(by('LOGIN')).count(), 1);
+  });
+
+  test('a later filter applies to the or() matches', async () => {
+    const { first, by } = on(screenDriver());
+    const loc = first.or(by('LOGIN')).or(by('CANCEL'));
+    assert.equal(await loc.count(), 2);
+    assert.equal(await loc.filter({ hasText: 'cancel' }).getText(), 'cancel');
+  });
+
+  test('first() picks from the or() matches', async () => {
+    const { first, by } = on(screenDriver());
+    assert.equal(await first.or(by('LOGIN')).first().getText(), 'login');
+  });
+
+  test('and() with an absent first locator still matches nothing, without looking up the other', async () => {
+    const screen = screenDriver();
+    const { first, by } = on(screen);
+    assert.equal(await first.and(by('LOGIN')).count(), 0);
+    assert.deepEqual(screen.lookups, ['SIGN IN']);
+  });
+});
+
 describe('Locator.filter', () => {
   test('filter({ hasText }) keeps only matching elements', async () => {
     const { el: loc } = makeLocator(
