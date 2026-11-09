@@ -22,6 +22,7 @@ export {
   type GesturePointer,
   type TraceMode,
   type VideoMode,
+  type SessionScope,
 } from './types/index.js';
 export type {
   ClickPoint,

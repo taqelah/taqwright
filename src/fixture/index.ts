@@ -1,11 +1,13 @@
 import type { ChildProcess } from 'node:child_process';
 import { promises as fs } from 'node:fs';
-import { test as baseTest } from '@playwright/test';
+import { relative } from 'node:path';
+import { test as baseTest, type TestInfo } from '@playwright/test';
 import WebDriver from 'webdriver';
 import type { Client as WebDriverClient } from 'webdriver';
 import { Mobile } from '../mobile/index.js';
 import {
   Platform,
+  type DeviceHandle,
   type DevicePoolEntry,
   type DeviceProvider,
   type TaqwrightUseOptions,
@@ -28,6 +30,7 @@ import { Tracer } from '../tracer/index.js';
 import { wrapForTracing } from '../tracer/proxy.js';
 import { shouldRetainArtifact } from './artifact-mode.js';
 import { cloudSessionAttachment } from './cloud-session.js';
+import { FileSessionCache } from './session-scope.js';
 import type { HarLog } from '../network/har.js';
 import {
   prepareNetworkProxy,
@@ -65,6 +68,37 @@ interface TaqwrightWorkerFixtures {
   // provider's one-time `globalSetup()` (creds check + build upload) runs once
   // per worker, not per test.
   deviceProvider: DeviceProvider | null;
+  // The per-file session cache for `sessionScope: 'file'`, or `null` for the
+  // default per-test sessions. Worker-scoped so a session outlives one test; its
+  // teardown closes the last file's session when the worker shuts down.
+  fileSession: FileSessionCache<OpenSession> | null;
+}
+
+/** A session the `fileSession` cache holds: the driver, plus the cloud handle. */
+interface OpenSession {
+  driver: WebDriverClient;
+  handle?: DeviceHandle;
+}
+
+// Whether a test is the first on its file-scoped session. Set by `rawDriver`,
+// read by `mobile` to run `resetBetweenTests` once per file. Keyed by TestInfo
+// (one per test) so nothing leaks into the public `rawDriver` type.
+const firstOnSession = new WeakMap<TestInfo, boolean>();
+
+/**
+ * Attach the cloud session id before the test body runs, so a failing or
+ * crashing test still has it: a report links the result to its grid session
+ * (and video) by this id, not by the dashboard name `syncTestDetails` may fail
+ * to write.
+ */
+async function attachCloudSession(testInfo: TestInfo, handle: DeviceHandle): Promise<void> {
+  const session = cloudSessionAttachment(handle);
+  if (!session) return;
+  try {
+    await testInfo.attach(session.name, { body: session.body, contentType: session.contentType });
+  } catch {
+    // best-effort — an attachment never fails a test
+  }
 }
 
 /** How many times to (re)attempt a local device operation on a transient blip. */
@@ -157,7 +191,8 @@ async function createLocalSession(use: TaqwrightUseOptions): Promise<WebDriverCl
 }
 
 /**
- * taqwright's `test`. Each test gets a fresh WebDriver session against
+ * taqwright's `test`. Each test gets a fresh WebDriver session (or, with
+ * `sessionScope: 'file'`, its spec file's shared session) against
  * the configured Appium server and a wrapped `Mobile` ready to drive it.
  */
 export const test = baseTest.extend<TaqwrightFixtures, TaqwrightWorkerFixtures>({
@@ -286,6 +321,54 @@ export const test = baseTest.extend<TaqwrightFixtures, TaqwrightWorkerFixtures>(
     { scope: 'worker' },
   ],
 
+  // Worker-scoped cache behind `sessionScope: 'file'`. The first test of a spec
+  // file opens a session (local: `createLocalSession`; cloud: `getDevice()`),
+  // later tests from that file reuse it, and moving to another file closes it.
+  // Cloud dashboard sync moves here from `rawDriver`: one sync per session,
+  // named after the file and failed if any of its tests failed.
+  fileSession: [
+    async ({ taqwrightUse, deviceProvider }, use, workerInfo) => {
+      if (taqwrightUse.sessionScope !== 'file') {
+        await use(null);
+        return;
+      }
+      const rootDir = workerInfo.config.rootDir;
+      const cache = new FileSessionCache<OpenSession>({
+        open: async () => {
+          if (!deviceProvider) return { driver: await createLocalSession(taqwrightUse) };
+          const handle = await deviceProvider.getDevice();
+          return { driver: handle.driver, handle };
+        },
+        close: async (session, summary) => {
+          if (deviceProvider?.syncTestDetails) {
+            try {
+              await deviceProvider.syncTestDetails({
+                status: summary.failed ? 'failed' : 'passed',
+                reason:
+                  summary.reason ??
+                  `taqwright: ${summary.tests} test${summary.tests === 1 ? '' : 's'} passed`,
+                name: relative(rootDir, summary.file) || summary.file,
+              });
+            } catch {
+              // best-effort — never block teardown over a dashboard sync
+            }
+          }
+          try {
+            await session.driver.deleteSession();
+          } catch {
+            // session may already be gone
+          }
+        },
+      });
+      try {
+        await use(cache);
+      } finally {
+        await cache.release();
+      }
+    },
+    { scope: 'worker' },
+  ],
+
   // Test-scoped network-capture handle. Ordering: `rawDriver` depends on
   // `networkProxy`, and `mobile` depends on `rawDriver`. Playwright tears
   // down in reverse, so the chain is `mobile → rawDriver → networkProxy`.
@@ -295,7 +378,9 @@ export const test = baseTest.extend<TaqwrightFixtures, TaqwrightWorkerFixtures>(
   // cloud hub captures HAR server-side.
   networkProxy: async ({ taqwrightUse, deviceProvider }, use, testInfo) => {
     const networkMode = taqwrightUse.network ?? 'off';
-    if (networkMode === 'off' || deviceProvider !== null) {
+    // A file-scoped session outlives the per-test proxy, so capture is off
+    // there (`defineConfig` rejects the combination; this is the backstop).
+    if (networkMode === 'off' || deviceProvider !== null || taqwrightUse.sessionScope === 'file') {
       await use(null);
       return;
     }
@@ -319,7 +404,23 @@ export const test = baseTest.extend<TaqwrightFixtures, TaqwrightWorkerFixtures>(
     }
   },
 
-  rawDriver: async ({ taqwrightUse, deviceProvider, networkProxy }, use, testInfo) => {
+  rawDriver: async ({ taqwrightUse, deviceProvider, networkProxy, fileSession }, use, testInfo) => {
+    // `sessionScope: 'file'`: reuse this file's session (or open it, closing the
+    // previous file's). Nothing is deleted or synced here — the cache does that
+    // when the file changes or the worker shuts down; this test's outcome just
+    // feeds the file's summary.
+    if (fileSession) {
+      const { session, isNew } = await fileSession.acquire(testInfo.file);
+      firstOnSession.set(testInfo, isNew);
+      if (session.handle) await attachCloudSession(testInfo, session.handle);
+      try {
+        await use(session.driver);
+      } finally {
+        fileSession.record({ status: testInfo.status ?? 'passed', error: testInfo.error?.message });
+      }
+      return;
+    }
+
     // Local/emulator: unchanged inline-capabilities path.
     if (!deviceProvider) {
       const driver = await createLocalSession(taqwrightUse);
@@ -359,20 +460,7 @@ export const test = baseTest.extend<TaqwrightFixtures, TaqwrightWorkerFixtures>(
     // session is deleted, on the same worker-scoped provider instance that
     // created it. Mirrors the inspector's `disconnect()`.
     const handle = await deviceProvider.getDevice();
-    // The session id, attached before the test body runs so a failing or crashing
-    // test still has it: a report links the result to its grid session (and video)
-    // by this id, not by the dashboard name `syncTestDetails` may fail to write.
-    const session = cloudSessionAttachment(handle);
-    if (session) {
-      try {
-        await testInfo.attach(session.name, {
-          body: session.body,
-          contentType: session.contentType,
-        });
-      } catch {
-        // best-effort — an attachment never fails a test
-      }
-    }
+    await attachCloudSession(testInfo, handle);
     try {
       await use(handle.driver);
     } finally {
@@ -407,8 +495,17 @@ export const test = baseTest.extend<TaqwrightFixtures, TaqwrightWorkerFixtures>(
     // throw on a host-local path the on-device driver can't see). Cloud
     // isolation comes from the fresh per-test session + the provider's own
     // reset (BrowserStack sets `appium:fullReset`; LambdaTest real devices
-    // reinstall per session).
-    if (!isCloud && taqwrightUse.resetBetweenTests && bundleId && taqwrightUse.buildPath) {
+    // reinstall per session). With `sessionScope: 'file'` the reset runs only
+    // for the first test on a session (the start of each file) — later tests in
+    // the file keep the app state the earlier ones built.
+    const firstOnThisSession = firstOnSession.get(testInfo) ?? true;
+    if (
+      !isCloud &&
+      firstOnThisSession &&
+      taqwrightUse.resetBetweenTests &&
+      bundleId &&
+      taqwrightUse.buildPath
+    ) {
       const appRef = platform === Platform.IOS ? { bundleId } : { appId: bundleId };
       const installArg =
         platform === Platform.IOS
