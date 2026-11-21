@@ -1,5 +1,5 @@
 import { access } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { PlaywrightTestConfig } from '@playwright/test';
 import { Platform, type TaqwrightConfig, type TaqwrightProjectConfig } from './types/index.js';
@@ -67,10 +67,50 @@ export async function loadTaqwrightConfigFile(
 
 /** Load the taqwright config from disk, if present. */
 export async function loadTaqwrightConfig(cwd?: string): Promise<TaqwrightConfig | undefined> {
-  const file = await findConfigFile(cwd);
-  if (!file) return undefined;
-  const cfg = await importConfigFile(file);
-  return cfg[TAQWRIGHT_KEY];
+  return loadTaqwrightConfigFrom(undefined, cwd);
+}
+
+/**
+ * Load the taqwright config from exactly `file` when one is given: the file
+ * Playwright loaded (`config.configFile`) or the CLI's `--config`. Only
+ * without a file does this walk up from `cwd` for a default-named one. Every
+ * runtime re-read goes through here, so `--config taqwright.local.config.ts`
+ * reaches the worker fixture, the discovery globalSetup, Appium auto-start,
+ * worker sizing and the inspector, not just Playwright (#145).
+ *
+ * Unlike {@link loadTaqwrightConfigFile}, an import error propagates: a broken
+ * config must fail the run, not silently resolve to nothing.
+ */
+export async function loadTaqwrightConfigFrom(
+  file: string | undefined,
+  cwd?: string,
+): Promise<TaqwrightConfig | undefined> {
+  const path = file ? resolve(file) : await findConfigFile(cwd);
+  if (!path) return undefined;
+  const cfg = await importConfigFile(path);
+  return cfg?.[TAQWRIGHT_KEY];
+}
+
+/**
+ * The error for "the run's project has no `use` options in this config". Names
+ * the file actually read and the projects it has, because the symptom of
+ * reading the wrong file is a project that "isn't there".
+ */
+export function missingProjectMessage(
+  config: TaqwrightConfig | undefined,
+  projectName: string | undefined,
+  configFile: string | undefined,
+): string {
+  const where = configFile ? basename(configFile) : 'taqwright.config.ts';
+  if (!config) {
+    return configFile
+      ? `taqwright: ${where} has no taqwright config — export defineConfig({...}) from it.`
+      : 'taqwright: no taqwright config found — create taqwright.config.ts or pass --config <file>.';
+  }
+  const names = config.projects.map((p) => `"${p.name}"`).join(', ') || 'none';
+  return projectName
+    ? `taqwright: no project named "${projectName}" in ${where}. Projects there: ${names}.`
+    : `taqwright: ${where} defines no projects.`;
 }
 
 /** Load the underlying Playwright config (used by the CLI). */
@@ -418,16 +458,18 @@ export function findSessionScopeMisconfig(config: TaqwrightConfig): string | nul
   return problems.length ? `taqwright: ${problems.join('\ntaqwright: ')}` : null;
 }
 
-/** Locate the use options for the active project (or the first one). */
+/**
+ * Locate the use options for the named project, or the first project when no
+ * name is given. A name that matches nothing returns `undefined` rather than
+ * falling back to the first project: running against some other project's
+ * device (possibly a billed cloud one) is worse than failing (#145).
+ */
 export function getUseOptions(
   config: TaqwrightConfig | undefined,
   projectName?: string,
 ): TaqwrightConfig['projects'][number]['use'] | undefined {
   if (!config) return undefined;
-  if (projectName) {
-    const match = config.projects.find((p) => p.name === projectName);
-    if (match) return match.use;
-  }
+  if (projectName) return config.projects.find((p) => p.name === projectName)?.use;
   return config.projects[0]?.use;
 }
 

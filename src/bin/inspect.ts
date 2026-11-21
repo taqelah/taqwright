@@ -1,6 +1,11 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { dirname } from 'node:path';
-import { findConfigFile, loadTaqwrightConfig, getUseOptions } from '../config.js';
+import {
+  findConfigFile,
+  loadTaqwrightConfigFrom,
+  getUseOptions,
+  missingProjectMessage,
+} from '../config.js';
 import { buildCapabilities } from '../capabilities.js';
 import { isPortOpen } from '../auto-appium.js';
 import { startInspectorServer } from '../inspector/server.js';
@@ -82,8 +87,14 @@ async function resolveDefaults(opts: InspectCliOptions): Promise<InspectorDefaul
 
   if (!configPath) return baseFallback;
 
-  const cfg = await loadTaqwrightConfig(dirname(configPath));
+  const cfg = await loadTaqwrightConfigFrom(configPath);
   const useOpts = getUseOptions(cfg, opts.project);
+  if (!useOpts && cfg && opts.project) {
+    // An explicit --project that isn't in the config is a typo or the wrong
+    // --config: stop rather than open the inspector on built-in defaults.
+    console.error(missingProjectMessage(cfg, opts.project, configPath));
+    process.exit(1);
+  }
   if (!useOpts) {
     console.log('taqwright inspect: no project resolved from config — using built-in defaults.');
     return { ...baseFallback, testDir: cfg?.testDir ?? 'tests' };

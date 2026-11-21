@@ -1,7 +1,6 @@
 import { createConnection } from 'node:net';
-import { dirname } from 'node:path';
 import type { ChildProcess } from 'node:child_process';
-import { loadTaqwrightConfig } from './config.js';
+import { loadTaqwrightConfigFrom } from './config.js';
 import { startAppiumServer, killAppiumOnPort } from './providers/appium.js';
 import { isCloudProvider } from './providers/index.js';
 import { bootableAvdName } from './setup/avd.js';
@@ -112,7 +111,7 @@ export async function maybeAutoStartAppium(
   configPath: string,
   projectFilter: string[] = [],
 ): Promise<ChildProcess[]> {
-  const cfg = await loadTaqwrightConfig(dirname(configPath));
+  const cfg = await loadTaqwrightConfigFrom(configPath);
   if (!cfg) return [];
 
   const procs: ChildProcess[] = [];
