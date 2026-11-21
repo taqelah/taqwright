@@ -347,6 +347,35 @@ test('example', async ({ mobile }) => {
 
 Refine a `Locator`: `.filter({ has, hasNot, hasText, hasNotText, visible })`, `.first()` / `.last()` / `.nth(n)`, `.locator(child)`, `.and(other)` / `.or(other)`, `.all()`, `.count()`.
 
+### Page objects — one class for Android and iOS
+
+Extend `Screen` and declare locators with Appium-style decorators. Each field gets the locator for the platform the test is running on:
+
+```ts
+import { Screen, FindBy, AndroidFindBy, iOSFindBy, type Locator } from '@taqwright/taqwright';
+
+export class LoginPage extends Screen {
+  @FindBy({ testId: 'login-username' }) // same id on both platforms
+  accessor username!: Locator;
+
+  @iOSFindBy({ accessibility: 'login-password' })
+  @AndroidFindBy({ id: 'com.app:id/password' })
+  accessor password!: Locator;
+
+  async login(user: string, pass: string) {
+    await this.username.fill(user);
+    await this.password.fill(pass);
+    await this.mobile.getByText('Sign in').click(); // the plain API still works
+  }
+}
+
+// in a test: const login = new LoginPage(mobile);
+```
+
+Selector keys (exactly one per decorator): `id`, `testId`, `accessibility` / `label`, `text` (+ `exact`), `placeholder` (+ `exact`), `className`, `xpath`, `uiAutomator` (Android only), `predicate` / `classChain` (iOS only). To try several strategies, pass a list: `@AndroidFindBy([{ id: 'com.app:id/login' }, { text: 'Log in' }])`. Every entry is looked up and the matches keep list order, so actions use the first entry's element when it's present and later entries only when earlier ones find nothing. Each entry costs one extra lookup per action, so keep lists short. A platform decorator overrides `@FindBy` on the same field. Using a field that has no locator for the current platform throws an error naming the field. `this.platform` lets a method branch when the steps differ, not just the locators.
+
+These are standard TypeScript decorators, which Playwright compiles out of the box. Declare each locator as `accessor name!: Locator`. A plain `name!: Locator` field fails to compile on Playwright 1.65+ whenever your tsconfig `target` is ES2022 or later ("Definitely assigned fields cannot be initialized here"); `accessor` works under any tsconfig. Don't enable `experimentalDecorators`, and don't use `declare` (it strips the decorator).
+
 ### Actions — on a `Locator`
 
 `click()` / `tap()` · `doubleTap()` · `longPress()` · `fill(value)` · `clear()` · `pressSequentially(text, { delay })` · `press(key)` · `focus()` · `blur()` · `check()` / `uncheck()` · `selectOption(value)` · `scrollIntoView()` · `swipeUp/Down/Left/Right()` · `pinchIn()` / `pinchOut()` · `dragTo(target)` / `dragToPoint({ x, y })` · `screenshot()`

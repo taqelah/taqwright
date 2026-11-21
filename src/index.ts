@@ -2,6 +2,15 @@ export { test } from './fixture/index.js';
 export { expect, type TaqwrightExpect, type MobileMatchers } from './expect.js';
 export { Mobile } from './mobile/index.js';
 export { Locator } from './locator/index.js';
+export {
+  Screen,
+  FindBy,
+  AndroidFindBy,
+  iOSFindBy,
+  type FindBySelector,
+  type FindByInput,
+  type LocatorDecorator,
+} from './pom/index.js';
 export { defineConfig, loadTaqwrightConfig as loadConfig } from './config.js';
 export { iosParallelCaps, type IosParallelCapsOptions } from './capabilities-helpers.js';
 export {
