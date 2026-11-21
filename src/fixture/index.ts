@@ -12,7 +12,7 @@ import {
   type DeviceProvider,
   type TaqwrightUseOptions,
 } from '../types/index.js';
-import { getUseOptions, loadTaqwrightConfig } from '../config.js';
+import { getUseOptions, loadTaqwrightConfigFrom, missingProjectMessage } from '../config.js';
 import { resolvedPoolEnvKey } from '../discovery.js';
 import { appiumRemoteOptions } from '../capabilities.js';
 import { ensurePlainGlobalDispatcher } from '../undici-dispatcher.js';
@@ -198,15 +198,15 @@ async function createLocalSession(use: TaqwrightUseOptions): Promise<WebDriverCl
 export const test = baseTest.extend<TaqwrightFixtures, TaqwrightWorkerFixtures>({
   taqwrightUse: [
     async ({}, use, workerInfo) => {
-      const config = await loadTaqwrightConfig();
+      // Re-read the file Playwright actually loaded (`--config`), not whatever
+      // taqwright.config.ts sits above the cwd — otherwise an alternate config's
+      // project silently ran against the default file's first project (#145).
+      const configFile = workerInfo.config.configFile || undefined;
+      const config = await loadTaqwrightConfigFrom(configFile);
       const projectName = workerInfo.project.name || undefined;
       const useOpts = getUseOptions(config, projectName);
       if (!useOpts) {
-        throw new Error(
-          `taqwright: no project found in taqwright.config.ts${
-            projectName ? ` matching "${projectName}"` : ''
-          }`,
-        );
+        throw new Error(missingProjectMessage(config, projectName, configFile));
       }
 
       const idx = workerInfo.parallelIndex;

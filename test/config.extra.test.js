@@ -24,8 +24,10 @@ describe('getUseOptions', () => {
   test('no name → first project', () => {
     assert.equal(getUseOptions(cfg).platform, Platform.ANDROID);
   });
-  test('unknown name → falls back to first project', () => {
-    assert.equal(getUseOptions(cfg, 'nope').platform, Platform.ANDROID);
+  // #145: falling back to projects[0] ran an alternate config's project on the
+  // default config's first (cloud) project. A named miss is now a miss.
+  test('unknown name → undefined, not the first project', () => {
+    assert.equal(getUseOptions(cfg, 'nope'), undefined);
   });
 });
 

@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
 import { Command } from 'commander';
-import { findConfigFile, loadTaqwrightConfig, resolveCliWorkers } from '../config.js';
+import { findConfigFile, loadTaqwrightConfigFrom, resolveCliWorkers } from '../config.js';
 import { maybeAutoStartAppium } from '../auto-appium.js';
 import { runDoctorChecks } from '../doctor.js';
 import { listDevices, type Device } from '../inspector/devices.js';
@@ -161,7 +161,7 @@ program
     // `workers` so the global pool matches the one project (the common
     // one-project-per-run path). Ambiguous multi-project runs are left on the
     // config's global cap.
-    const cfg = await loadTaqwrightConfig(dirname(configPath));
+    const cfg = await loadTaqwrightConfigFrom(configPath);
 
     // A --reporter flag replaces the config's reporters, including the telemetry one
     // defineConfig adds, so it is appended to the flag's value here (comma-separated). Not when

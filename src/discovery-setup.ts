@@ -1,6 +1,6 @@
 import { Platform } from './types/index.js';
 import type { TaqwrightConfig, TaqwrightProjectConfig } from './types/index.js';
-import { loadTaqwrightConfig, effectiveWorkers } from './config.js';
+import { loadTaqwrightConfigFrom, effectiveWorkers } from './config.js';
 import {
   discoverAssignableDevices,
   selectDevicePool,
@@ -83,8 +83,13 @@ function selectedProjects(): string[] {
   }
 }
 
-export default async function autoDiscoverGlobalSetup(): Promise<void> {
-  const config = await loadTaqwrightConfig();
+// Playwright calls every globalSetup with its FullConfig; only `configFile` is
+// needed here: the file `--config` named, so discovery reads the same config
+// the run uses rather than the default-named one (#145).
+export default async function autoDiscoverGlobalSetup(playwrightConfig?: {
+  configFile?: string;
+}): Promise<void> {
+  const config = await loadTaqwrightConfigFrom(playwrightConfig?.configFile || undefined);
   if (!config) return;
 
   for (const project of projectsNeedingSetup(config, selectedProjects())) {
